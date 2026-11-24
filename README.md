@@ -47,16 +47,16 @@ EasyShell 是一个 Windows、macOS 与 Linux 桌面终端。它把本地命令�
   </tr>
   <tr>
     <td align="center" width="33%">
-      <img src="assets/readme/sftp.png" alt="SFTP 文件面板：跟随标签所在主机" width="100%" /><br />
-      <sub><b>SFTP 文件面板</b> · 标签所在主机并跟随会话当前目录</sub>
+      <img src="assets/readme/sftp.png" alt="SFTP 文件面板：跟随标签所在主机与当前目录" width="100%" /><br />
+      <sub><b>SFTP 文件面板</b> · 跟随标签所在主机</sub>
     </td>
     <td align="center" width="33%">
       <img src="assets/readme/ai-sessions.png" alt="AI 会话列表：临时会话与项目会话，加号展开类型菜单" width="100%" /><br />
-      <sub><b>会话列表</b> · 新建会话分临时会话与项目会话</sub>
+      <sub><b>会话列表</b> · 临时会话与项目会话</sub>
     </td>
     <td align="center" width="33%">
       <img src="assets/readme/agent.png" alt="对话详情：Agent 会话与命令审批卡片" width="100%" /><br />
-      <sub><b>对话详情</b> · Agent 对话、命令审批卡片与权限模式</sub>
+      <sub><b>对话详情</b> · 审批卡片与权限模式</sub>
     </td>
   </tr>
 </table>
