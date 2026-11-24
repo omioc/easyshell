@@ -246,24 +246,13 @@
   margin-top: 4px;
 }
 
-/* Same toolbar strip and inset hairline as the SFTP footer: one dock, one
-   geometry. */
+/* The info dock: the same toolbar strip as the SFTP footer, one geometry. No
+   rule above it - the gap the body already keeps is the separation. */
 .info-footer {
-  position: relative;
   display: flex;
   gap: 2px;
   flex: none;
-  padding: 8px 10px;
-}
-
-.info-footer::before {
-  position: absolute;
-  top: 0;
-  right: var(--divider-inset);
-  left: var(--divider-inset);
-  height: 1px;
-  background: var(--border);
-  content: '';
+  padding: 12px 10px 10px;
 }
 
 /* ------------------------------------------------------------- location chain */

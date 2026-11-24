@@ -439,27 +439,16 @@
 /* ------------------------------------------------------------ conversation */
 
 /*
- * One line: the way back, the name of what is open, then the state. The rule
- * under it is inset from both edges - a full-bleed line boxes the header off
- * from the transcript it belongs to, and the sheet is one surface.
+ * One line: the way back, the name of what is open, then the state. No rule
+ * separates it from the transcript: the header holds still while the body
+ * scrolls, and the gap between them is the only boundary the sheet needs.
  */
 .agent-conv-head {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
   padding: 10px 12px 10px 10px;
-}
-
-.agent-conv-head::after {
-  position: absolute;
-  right: var(--divider-inset);
-  bottom: 0;
-  left: var(--divider-inset);
-  height: 1px;
-  background: var(--border);
-  content: '';
 }
 
 .agent-back svg {

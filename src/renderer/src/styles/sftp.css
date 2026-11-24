@@ -140,7 +140,7 @@
   gap: 1px;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 2px 6px 8px;
+  padding: 2px 6px 12px;
   overflow-y: auto;
   outline: none;
 }
@@ -358,24 +358,14 @@
 
 /* ------------------------------------------------------------------ footer */
 
-/* The rule above the toolbar is inset like every other hairline in the dock. */
+/* The toolbar closes the dock without a rule above it: the list keeps its own
+   bottom gap, and the sheet stays one surface. */
 .sftp-foot {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
   flex: none;
-  padding: 8px 10px;
-}
-
-.sftp-foot::before {
-  position: absolute;
-  top: 0;
-  right: var(--divider-inset);
-  left: var(--divider-inset);
-  height: 1px;
-  background: var(--border);
-  content: '';
+  padding: 12px 10px 10px;
 }
 
 .sftp-foot-status {
