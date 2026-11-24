@@ -630,6 +630,13 @@ describe('AgentManager task records', () => {
     expect(
       restarted.transcript(task.id).messages.some((message) => message.text.includes('replayed hello')),
     ).toBe(true);
+    // A replay writes through the same channel as a live answer and nothing
+    // closes it afterwards, so a task that was restored used to come back with
+    // its last answer still "arriving": the caret under it never went away, and
+    // the next turn was appended to that same message.
+    expect(restarted.transcript(task.id).messages.some((message) => message.streaming)).toBe(
+      false,
+    );
   });
 
   it('rebuilds a replayed conversation in the order it happened', async () => {

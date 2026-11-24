@@ -621,6 +621,13 @@ export class AgentManager {
             });
           } finally {
             task.replaying = false;
+            // A replay is one long turn that never ends: it writes its answer
+            // through the same stream channel a live one uses, and nothing
+            // arrives afterwards to close it. Left open, the last replayed
+            // block kept the caret of an answer still being typed - forever,
+            // with the slot still pointing at it, so the next turn appended to
+            // the old message instead of starting its own.
+            this.endStreams(task);
           }
         }
       }

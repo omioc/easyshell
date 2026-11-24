@@ -561,7 +561,7 @@
 }
 
 /* Spoken, not drawn: the shape says it visually, this is what a reader hears. */
-.agent-skeleton-status {
+.agent-spoken {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -790,13 +790,30 @@
   max-width: 100%;
 }
 
-.agent-caret {
+/*
+ * The caret of an answer that is still being written.
+ *
+ * Drawn on the block that ends the message rather than appended after it: the
+ * answer arrives as a stack of markdown blocks, so an element of its own was
+ * laid out as one more row of the column - a bar hanging under the paragraph
+ * instead of the cursor at the end of the words. A pseudo-element sits inside
+ * the last line, costs no layout, and leaves with the attribute the moment the
+ * turn ends - which is what makes a finished answer look finished.
+ *
+ * Only the block that really ends the answer is marked: a list, a quote and a
+ * code fence each hold their text one level down, and marking their container
+ * instead would put the caret on a line of its own again.
+ */
+.agent-msg[data-streaming] .agent-markdown > :not(ul, ol, blockquote, div):last-child::after,
+.agent-msg[data-streaming] .agent-markdown > :is(ul, ol):last-child > li:last-child::after,
+.agent-msg[data-streaming] .agent-markdown > blockquote:last-child > p:last-child::after {
   display: inline-block;
   width: 2px;
   height: 12px;
   margin-left: 2px;
   vertical-align: -1px;
   background: var(--accent);
+  content: '';
   animation: agent-caret-blink 1.1s ease-in-out infinite;
 }
 
@@ -1770,7 +1787,12 @@
     }
   }
 
-  .agent-caret,
+  /*
+   * The caret stays, its blink does not: a bar that holds still still says the
+   * answer is arriving, without a pulse in the corner of the eye. The status
+   * dot of a running task goes quiet the same way.
+   */
+  .agent-msg[data-streaming] .agent-markdown ::after,
   .agent-dot[data-status='starting'],
   .agent-dot[data-status='running'] {
     animation: none;

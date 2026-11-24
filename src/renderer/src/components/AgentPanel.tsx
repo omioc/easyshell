@@ -558,28 +558,36 @@ function MessageRow({ message, agentLabel }: { message: AgentMessage; agentLabel
     );
   }
 
-  const caret = message.streaming ? (
-    <span className="agent-caret" aria-label={t('agent.streaming')} />
-  ) : null;
+  /*
+   * The caret is drawn, not rendered.
+   *
+   * A markdown answer is a stack of blocks, so an element placed after it would
+   * be laid out as another row of the column - a bar hanging under the
+   * paragraph it was meant to follow. A pseudo-element lands inside the block
+   * that ends the answer, which is where a typing cursor belongs, and it costs
+   * no layout when the state flips: the attribute goes away and the caret goes
+   * with it.
+   */
+  const streaming = message.streaming ? '' : undefined;
 
   if (message.role === 'user') {
     return (
       <div className="agent-msg" data-role="user">
         <span className="agent-msg-label">{t('agent.role.you')}</span>
-        <div className="agent-msg-bubble agent-text">
-          {message.text}
-          {caret}
-        </div>
+        <div className="agent-msg-bubble agent-text">{message.text}</div>
       </div>
     );
   }
 
   return (
-    <div className="agent-msg" data-role="agent">
+    <div className="agent-msg" data-role="agent" data-streaming={streaming}>
       <span className="agent-msg-label">{agentLabel}</span>
       {/* The agent answers in markdown, and it answers while it types. */}
       <MarkdownText text={message.text} />
-      {caret}
+      {/* Drawn as a caret, spoken as a sentence: the bar says nothing aloud. */}
+      {message.streaming ? (
+        <span className="agent-spoken">{t('agent.streaming')}</span>
+      ) : null}
     </div>
   );
 }
@@ -1031,7 +1039,7 @@ function TranscriptSkeleton() {
   const t = useT();
   return (
     <div className="agent-skeleton" role="status">
-      <span className="agent-skeleton-status">{t('agent.transcriptLoading')}</span>
+      <span className="agent-spoken">{t('agent.transcriptLoading')}</span>
       {[0, 1].map((block) => (
         <div key={block} className="agent-skeleton-block" aria-hidden="true">
           <span className="agent-skeleton-line" data-width="label" />
