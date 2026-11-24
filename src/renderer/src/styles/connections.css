@@ -1,0 +1,115 @@
+/*
+ * SSH connection editor.
+ *
+ * One host per page: the sidebar owns the list, so this is a plain form with a
+ * title that names the host you are editing. It wears the settings page frame —
+ * the same card, the same heading row — because a saved host is a thing you edit,
+ * not a dialog that curtains off the terminal. The destructive action stays in
+ * the footer, on the left, away from the primary one.
+ */
+
+/*
+ * The footer owns the bottom edge of the card, so the scrolling body gives up
+ * the extra bottom padding settings uses to breathe before the edge.
+ */
+.connections-content {
+  padding: 16px 20px;
+}
+
+/*
+ * A form reads in one column and stops where a field is still scanned as a
+ * single line; the page around it stays as wide as the window.
+ */
+.connections-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.secret-note {
+  margin-top: -6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.textarea {
+  height: auto;
+  min-height: 64px;
+  padding: 6px 8px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/*
+ * The footer's rule starts and ends where the form's content does, instead of
+ * running into the card's rounded corners. It sits on a pseudo-element so the
+ * row keeps the full width for its buttons.
+ */
+.connections-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 12px 20px;
+}
+
+.connections-foot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 20px;
+  left: 20px;
+  height: 1px;
+  background: var(--border);
+}
+
+.connections-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/*
+ * Testing is the secondary action. A fixed width keeps the primary button from
+ * sliding left and right while the label swaps and the tick appears; a pass
+ * tints the button so the answer survives the toast fading out.
+ */
+.connections-test {
+  justify-content: center;
+  min-width: 112px;
+}
+
+.connections-test[data-ok='true'],
+.connections-test[data-ok='true']:hover:not(:disabled) {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.confirm-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.confirm-text {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.button-danger {
+  color: var(--danger);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--canvas);
+}

@@ -1,0 +1,5 @@
+<!-- Two sparkles: the assistant, wherever the app points at it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M6.4 2.2 8.1 4.7 10.6 6.4 8.1 8.1 6.4 10.6 4.7 8.1 2.2 6.4 4.7 4.7Z" fill="currentColor" stroke="none" />
+  <path d="M11.9 10 12.8 11 13.8 11.9 12.8 12.8 11.9 13.8 11 12.8 10 11.9 11 11Z" fill="currentColor" stroke="none" />
+</svg>

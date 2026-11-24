@@ -1,0 +1,9 @@
+<!-- A shield with a check inside: approval that runs on its own, but only inside what the gate already allows. Auto approve, not "no rules". The check carries a heavier stroke than the shield: at 13px a 1.5 stroke thins into the shield's own outline and the two read as one smudge. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path
+    d="M8 2.4 12.7 3.9v3.5c0 2.7-1.8 4.6-4.7 5.6-2.9-1-4.7-2.9-4.7-5.6V3.9z"
+    fill="currentColor"
+    fill-opacity="0.18"
+  />
+  <path d="M5.7 7.6 7.4 9.3l3.3-3.5" stroke-width="2" />
+</svg>

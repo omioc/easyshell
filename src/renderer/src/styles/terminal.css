@@ -1,0 +1,147 @@
+/*
+ * The terminal card: the one dark surface in a light shell. It keeps its own
+ * radius and shadow so it reads as something you work inside rather than part
+ * of the chrome.
+ */
+
+.workspace {
+  display: flex;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--terminal-bg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-terminal);
+  overflow: hidden;
+}
+
+/*
+ * Settings and the connection editor take the main area instead. Inactive tabs
+ * are already hidden with display: none, so the terminal survives this the same
+ * way it survives a tab switch, and it is fitted again when it comes back.
+ */
+.workspace[data-view='settings'] .terminal-stage,
+.workspace[data-view='connection'] .terminal-stage {
+  display: none;
+}
+
+/* No session: the same slot becomes a light sheet for the welcome page. */
+.terminal-stage[data-empty='true'] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+/* Panes stay mounted while hidden so scrollback and shell state survive. */
+.terminal-slot {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.terminal-slot[data-active='true'] {
+  display: block;
+}
+
+/*
+ * The gutter is expressed as offsets, not padding: the fit addon measures this
+ * box and subtracts only `.xterm`'s own padding, so padding here would make it
+ * ask the pty for one row too many and clip the last line.
+ */
+.terminal-host {
+  position: absolute;
+  inset: 14px 8px 12px 16px;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  background: transparent;
+}
+
+/*
+ * The pane draws its own scrollbar (see TerminalPane). The native one is painted
+ * from scroll metrics Chromium caches, and after a burst of output the thumb can
+ * claim a position the screen does not agree with. Hidden rather than removed:
+ * the viewport still has to scroll, and the fit addon still reserves its width.
+ */
+.terminal-host[data-own-scroll='true'] .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.terminal-host[data-own-scroll='true'] .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * The gutter the fit addon reserves, so nothing is ever drawn underneath it.
+ *
+ * It hangs past the host's own 8px right inset (`inset: 14px 8px 12px 16px`)
+ * and stops at the card's edge: with the thumb's 3px margin that puts the bar
+ * 3px in, the same distance every other scrollbar in the app sits at. Inside the
+ * host it read as 11px from the edge and looked detached from the window.
+ */
+.term-scroll {
+  position: absolute;
+  top: 0;
+  right: -8px;
+  bottom: 0;
+  z-index: 3;
+  width: 10px;
+  touch-action: none;
+}
+
+/* Nothing to scroll: no bar, and no pointer target either. */
+.term-scroll[data-idle='true'] {
+  pointer-events: none;
+}
+
+/* Same silhouette as the app-wide `::-webkit-scrollbar-thumb`: 4px of colour. */
+.term-scroll-thumb {
+  width: 4px;
+  margin: 0 3px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  will-change: transform;
+  transition: background-color 120ms ease;
+}
+
+.term-scroll:hover .term-scroll-thumb,
+.term-scroll[data-dragging='true'] .term-scroll-thumb {
+  background: var(--text-faint);
+}
+
+.term-scroll[data-idle='true'] .term-scroll-thumb {
+  opacity: 0;
+}
+
+.terminal-state {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.terminal-state[data-status='error'] {
+  border-color: rgba(220, 61, 67, 0.6);
+  color: #ff9ea1;
+}

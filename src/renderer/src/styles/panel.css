@@ -1,0 +1,437 @@
+/*
+ * Right sheet: the AI assistant, or the active terminal's metadata. It docks
+ * rather than overlays, so the terminal keeps every pixel it can afford, and it
+ * slides in once when it opens. Closing is a layout change, so it has no exit
+ * animation.
+ *
+ * The sheet is a headerless card: its tab row floats in the window's top row
+ * (see `.side-tabs`) and the body owns the whole card.
+ */
+
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: var(--sheet-width);
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(14px);
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+}
+
+.info-panel[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * The sheet's tab row lives in the window's top row, not inside the card.
+ *
+ * It is built from the same parts as a terminal tab: a transparent pill on the
+ * canvas, the active one lifted onto a surface with a hairline border and the
+ * card shadow, at exactly --tab-height so both rows of chrome share a baseline.
+ * A container box around the two tabs would have made them read as a segmented
+ * control inside the panel instead of a peer of the tabs beside them.
+ *
+ * It is taken out of the row's flow and pinned to the sheet's own left edge, so
+ * the two read as one column: tabs on top, sheet below, one straight line down
+ * the left. Flex flow could only have right-aligned it against the window
+ * buttons, which left the tabs hanging a few pixels wide of the card at any
+ * label length. The drag strip behind it is untouched - the pills are buttons,
+ * so they still absorb their own clicks and the empty space still moves the
+ * window.
+ */
+.side-tabs {
+  position: absolute;
+  /* The sheet's left edge, measured from the right of the same row. */
+  left: calc(100% - var(--sheet-width));
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+  /* Arrives with the sheet it belongs to, from the same edge and on the same
+     curve. Tab switching itself does not animate. */
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+}
+
+.side-tabs[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * One square per tab, the same 30px pill as before, now carrying an icon: the
+ * name lives in the tooltip, so the row stops being a slice of the header and
+ * becomes two small targets pinned over the sheet it belongs to.
+ */
+.side-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--tab-height);
+  height: var(--tab-height);
+  /* Transparent border, so the active tab does not shift its icon by a pixel. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur-press) ease-out,
+    border-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.side-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.side-tab[data-active='true'] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+/* The global focus ring squares every element off to a 4px radius; a pill keeps
+   its own shape instead. */
+.side-tab:focus-visible {
+  border-radius: var(--radius-control);
+}
+
+.info-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px 14px 16px;
+  overflow-y: auto;
+}
+.info-group + .info-group {
+  margin-top: 16px;
+}
+
+.info-group-title {
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The key is sized by its own text and never wraps: a fixed or shrinkable label
+ * column broke "Session id" (and any two-character Chinese key) across two lines
+ * as soon as the value next to it was long. The value gets every pixel left
+ * over.
+ */
+.info-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.info-key {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.info-value {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  /*
+   * One line, right-aligned like every other row. A value breaks only when it
+   * genuinely does not fit the column, and even then it stays right-aligned -
+   * splitting the row in two costs a line that a narrow window does not have.
+   */
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Digits line up; the face is the UI's, not the terminal's. */
+.info-value[data-mono='true'] {
+  font-variant-numeric: tabular-nums;
+}
+
+.info-value[data-empty='true'] {
+  color: var(--text-faint);
+}
+
+.info-value[data-tone='danger'] {
+  color: var(--danger);
+}
+
+.info-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+/* ----------------------------------------------------- no terminal yet */
+
+/*
+ * The sheet with nothing to report. Same construction as the assistant's setup
+ * state - a circle, a title, one line of why, one action - because they are the
+ * same moment: a dock with no subject yet. The numbers are deliberately
+ * identical (76px circle, 14.5px title, 11.5px hint) so the two empty states
+ * read as one family rather than two different apologies.
+ */
+.info-empty-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+}
+
+.info-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 236px;
+  text-align: center;
+}
+
+.info-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.info-empty-title {
+  font-size: 14.5px;
+  font-weight: 580;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.info-empty-hint {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.info-empty-action {
+  margin-top: 4px;
+}
+
+/* Same toolbar strip and inset hairline as the SFTP footer: one dock, one
+   geometry. */
+.info-footer {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding: 8px 10px;
+}
+
+.info-footer::before {
+  position: absolute;
+  top: 0;
+  right: var(--divider-inset);
+  left: var(--divider-inset);
+  height: 1px;
+  background: var(--border);
+  content: '';
+}
+
+/* ------------------------------------------------------------- location chain */
+
+.info-chain {
+  display: flex;
+  flex-direction: column;
+}
+
+.chain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chain-hop {
+  position: relative;
+  padding-left: 20px;
+}
+
+.chain-hop::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 16px;
+  bottom: -14px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.chain-hop:last-child::before {
+  display: none;
+}
+
+.chain-node {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+/* The filled dot marks the hop the user is on: the end of the chain. */
+.chain-hop[data-current='true'] .chain-node {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.chain-body {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--canvas);
+}
+
+.chain-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chain-label {
+  font-size: 11.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.chain-badge {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* The badge of the hop the user is on: the same accent as its dot. */
+.chain-badge-current {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.chain-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.chain-meta-key {
+  margin-right: 4px;
+  color: var(--text-faint);
+}
+
+.chain-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.info-raw {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The sheet's only child: the active tab owns the whole card, top to bottom.
+ */
+.side-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * Secondary switch inside the session body. The top row already owns the real
+ * tabs, so the four sections are chips instead of a second tab row.
+ */
+.info-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: none;
+  padding: 10px 14px 0;
+}
+
+.info-chip {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-chip);
+  color: var(--text-faint);
+  font-size: 11px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+.info-chip:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.info-chip:active {
+  transform: scale(0.97);
+}
+
+.info-chip[data-active='true'] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}

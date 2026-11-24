@@ -1,0 +1,1191 @@
+/*
+ * App shell.
+ *
+ * One tinted canvas holding two cards: a white sidebar that owns navigation and
+ * a dark terminal card that owns the work. The stage header above the tabs is
+ * the identity line; the tab strip belongs to the document, not the chrome, so
+ * it stays on the canvas instead of inside a bar.
+ */
+
+.app-shell {
+  display: flex;
+  gap: var(--shell-gap);
+  height: 100%;
+  padding: var(--shell-gap);
+  /*
+   * macOS keeps its traffic lights in the window's top-left corner, so the top
+   * padding carries the band they own as well. Nothing starts that high, which
+   * is why the logo and the title can never slide under them.
+   */
+  padding-top: calc(var(--shell-gap) + var(--titlebar-strip));
+  background: var(--canvas);
+  color: var(--text);
+}
+
+/*
+ * macOS: `hiddenInset` takes the title bar away and leaves the traffic lights
+ * floating in the top-left corner. That band belongs to them, so the shell pads
+ * for it and nothing else may start that high.
+ */
+.app-shell[data-platform='darwin'] {
+  --titlebar-strip: 18px;
+}
+
+/* Fullscreen has no traffic lights, so nothing has to reserve the band. */
+.app-shell[data-platform='darwin'][data-fullscreen='true'] {
+  --titlebar-strip: 0px;
+}
+
+/*
+ * The band is its own element rather than the shell's own padding: a drag region
+ * belongs to the box that declares it, and an overlay that reaches up here (a
+ * menu flipped above its anchor) must keep its clicks. The fill is the canvas
+ * colour - a region with nothing painted in it is not registered as one.
+ */
+.titlebar-band {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: calc(var(--shell-gap) + var(--titlebar-strip));
+  background: var(--canvas);
+  -webkit-app-region: drag;
+}
+
+/* ------------------------------------------------------------------ sidebar */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: var(--sidebar-width);
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.sidebar-head {
+  flex: none;
+  padding: 14px 14px 2px;
+}
+
+/* Still a window drag region: the logo is the top-left corner of the window. */
+.titlebar {
+  -webkit-app-region: drag;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.brand-mark {
+  display: block;
+  flex: none;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.brand-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.demo-badge {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 5px;
+  font-size: 9.5px;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warning);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+/*
+ * Two independent lists. Sessions keeps at most --session-rows rows and scrolls
+ * past that; Workspaces takes whatever height is left and scrolls on its own.
+ * The panel itself never scrolls, so one list can never push the other away.
+ */
+.sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 10px 10px 14px;
+  overflow: hidden;
+}
+
+.side-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+/* Sessions: a fixed ceiling, so a long inventory cannot eat the workspaces. */
+.side-section[data-section='sessions'] {
+  flex: 0 0 auto;
+}
+
+.side-section[data-section='sessions'] .side-list {
+  max-height: calc(var(--session-rows) * 36px + (var(--session-rows) - 1) * 1px);
+}
+
+/* Workspaces: the leftover height, scrolled inside itself. */
+.side-section[data-section='workspaces'] {
+  flex: 1 1 auto;
+}
+
+.side-section[data-section='workspaces'] .side-list {
+  flex: 1 1 auto;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 6px 8px;
+}
+
+.side-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.side-add {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  /* The section header stays quiet until the pointer is in it. */
+  opacity: 0;
+  transition:
+    opacity var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.side-head:hover .side-add,
+.side-head:focus-within .side-add,
+.side-add[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.side-add:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+
+.side-add:active {
+  transform: scale(0.92);
+}
+
+.side-add[aria-expanded='true'] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /*
+   * No scrollbar is drawn: the wheel still scrolls the list, but the rail stays
+   * quiet, and rows no longer reflow by 15px the moment the list starts to
+   * overflow.
+   */
+  scrollbar-width: none;
+  /*
+   * The selected row's bookmark is painted 10px to the left of the row, so the
+   * list keeps a band of padding for it: overflow clips at the padding box, not
+   * at the content box.
+   */
+  margin: 0 -10px;
+  padding: 0 10px;
+}
+
+.side-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* --------------------------------------------------------------- row parts */
+
+.side-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /*
+   * Only a reorder moves this wrapper. The transition is what makes the other
+   * rows slide to the slot a drop would give them instead of teleporting there.
+   */
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+/* The selected row is marked at the edge of the panel, like a bookmark. */
+.side-row-wrap::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-press) ease-out;
+}
+
+.side-row-wrap[data-selected='true']::before {
+  opacity: 1;
+}
+
+/*
+ * The carried row is a fixed-position copy of the original (see
+ * `lib/inventoryDrag.ts`): it keeps the row's look but lifts off the list with a
+ * surface, a hairline and a shadow, and follows the pointer without easing —
+ * a transition there would make it lag behind the hand. The row it left keeps
+ * its slot and is merely hidden.
+ */
+.side-row-wrap[data-dragging='true'] {
+  transition: none;
+  pointer-events: none;
+}
+
+.side-row-wrap[data-dragging='true'] .side-row {
+  /* The button is pressed for the whole drag; the lift replaces its press. */
+  transform: none;
+  background: var(--surface);
+  box-shadow:
+    0 12px 24px -18px var(--shadow-color),
+    0 0 0 1px var(--border);
+  cursor: grabbing;
+}
+
+.side-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 30px 0 8px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color var(--dur-press) ease-out,
+    /* Only the row that just landed changes its shadow. */
+    box-shadow var(--dur-in) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.side-row:hover {
+  background: var(--hover);
+}
+
+/* While a row is in flight (or settling) the highlight would chase the pointer. */
+body[data-row-dragging] .side-row:hover {
+  background: transparent;
+}
+
+/*
+ * The row that just landed arrives wearing the lift it had in flight — the same
+ * surface, hairline and shadow as the carried copy — with no transition, so the
+ * hand-off is one continuous object. It is released a frame or two later
+ * (`settle`), which is when the ordinary row transitions fade it back into a
+ * plain row. Declared after the hover rules so the lift wins while it is held.
+ */
+body .side-row-wrap[data-landed='true'] .side-row {
+  background: var(--surface);
+  box-shadow:
+    0 12px 24px -18px var(--shadow-color),
+    0 0 0 1px var(--border);
+  transition: none;
+}
+
+.side-row:active {
+  transform: scale(0.995);
+}
+
+.side-row-wrap[data-selected='true'] .side-row {
+  background: var(--accent-wash);
+}
+
+.side-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: color var(--dur-press) ease-out;
+}
+
+.side-row-wrap[data-selected='true'] .side-row-icon {
+  color: var(--accent);
+}
+
+.side-row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.side-badge {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--hover);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 17px;
+  letter-spacing: 0.01em;
+}
+.side-more {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-faint);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.side-row-wrap:hover .side-more,
+.side-row-wrap:focus-within .side-more,
+.side-row-wrap[data-selected='true'] .side-more {
+  opacity: 1;
+}
+
+.side-more:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* The trigger keeps its affordance while its menu is open, so the open row is
+   still identifiable when the pointer has moved into the popover. */
+.side-more[data-open='true'] {
+  background: var(--hover);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.side-more:active {
+  transform: translateY(-50%) scale(0.9);
+}
+
+.side-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  margin: 2px 0;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- workspace */
+
+.ws {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ws-head {
+  padding-right: 30px;
+}
+
+/*
+ * A workspace header is a drop zone as well: with the list collapsed, or with no
+ * hosts in it yet, there is no gap for a dragged row to open, so the header
+ * itself says where the host will land.
+ */
+.ws-head-wrap[data-drop='true'] .side-row {
+  background: var(--hover);
+}
+
+.ws-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 12px;
+  color: var(--text-faint);
+  transition: transform 160ms var(--ease-out);
+}
+
+.ws[data-open='false'] .ws-chevron {
+  transform: rotate(-90deg);
+}
+
+.ws-actions {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  transform: translateY(-50%);
+}
+
+.ws-actions .side-more {
+  position: static;
+  transform: none;
+}
+
+.ws-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 12px;
+}
+
+.ws-body .side-row {
+  height: 34px;
+  gap: 8px;
+  padding-left: 6px;
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------------ empty */
+
+.side-empty {
+  padding: 4px 8px 2px;
+}
+
+.side-empty-title {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.side-empty-hint {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.side-empty-child {
+  padding: 2px 8px 6px 10px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.sidebar-foot {
+  flex: none;
+  padding: 6px 10px 12px;
+}
+
+.foot-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: 13px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.foot-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.foot-button:active {
+  transform: scale(0.995);
+}
+
+/* ------------------------------------------------------- collapsed sidebar */
+
+/*
+ * Collapsed, the rail keeps every icon and drops every label, so the terminal
+ * gets the width back. The names do not disappear for good: each row already
+ * carries a title, and the panel's own menu (right click) still works.
+ */
+.app-shell[data-sidebar='collapsed'] .sidebar {
+  width: var(--sidebar-width-collapsed);
+}
+
+.app-shell[data-sidebar='collapsed'] .brand-name,
+.app-shell[data-sidebar='collapsed'] .demo-badge,
+.app-shell[data-sidebar='collapsed'] .side-title,
+.app-shell[data-sidebar='collapsed'] .side-row-title,
+.app-shell[data-sidebar='collapsed'] .side-badge,
+.app-shell[data-sidebar='collapsed'] .side-more,
+.app-shell[data-sidebar='collapsed'] .ws-chevron,
+.app-shell[data-sidebar='collapsed'] .ws-actions,
+.app-shell[data-sidebar='collapsed'] .ws-rename,
+.app-shell[data-sidebar='collapsed'] .side-empty,
+.app-shell[data-sidebar='collapsed'] .foot-label {
+  display: none;
+}
+
+.app-shell[data-sidebar='collapsed'] .sidebar-head {
+  padding: 14px 0 2px;
+}
+
+.app-shell[data-sidebar='collapsed'] .sidebar-brand {
+  justify-content: center;
+}
+
+.app-shell[data-sidebar='collapsed'] .sidebar-scroll {
+  gap: 12px;
+  padding: 10px 0 14px;
+}
+
+/*
+ * Collapsed, a short dash does the job the section title did: the rail has no
+ * room for a heading, so the boundary only needs to be hinted at.
+ *
+ * The dash is a fixed-size background rather than a border or a flex item: those
+ * size themselves from the box, so a frame where the rail is still wide paints a
+ * long line. A background with an explicit size cannot stretch, ever.
+ */
+.app-shell[data-sidebar='collapsed'] .side-section + .side-section {
+  padding-top: 21px;
+  border-top: 0;
+  background-image: linear-gradient(var(--border-strong), var(--border-strong));
+  background-repeat: no-repeat;
+  background-position: center 10px;
+  background-size: 20px 1px;
+}
+
+/* Collapsed, a new workspace is made by expanding the rail first. */
+.app-shell[data-sidebar='collapsed'] .side-section[data-section='workspaces'] .side-head {
+  display: none;
+}
+
+/* Collapsed, the rail has no side padding for the list band to line up with. */
+.app-shell[data-sidebar='collapsed'] .side-list {
+  margin: 0;
+  padding: 0;
+}
+
+.app-shell[data-sidebar='collapsed'] .side-head {
+  justify-content: center;
+  padding: 0 0 4px;
+}
+
+/* The + is the only affordance left in the section, so it stops hiding. */
+.app-shell[data-sidebar='collapsed'] .side-add {
+  opacity: 1;
+}
+
+.app-shell[data-sidebar='collapsed'] .side-row,
+.app-shell[data-sidebar='collapsed'] .ws-body .side-row {
+  /* Full rail width: the icon is centred, the hit target stays honest, and the
+     hover fill does not become a small floating pill. */
+  justify-content: center;
+  gap: 0;
+  height: 36px;
+  padding: 0;
+}
+
+.app-shell[data-sidebar='collapsed'] .side-row-wrap {
+  justify-content: center;
+}
+
+/* The selection bookmark was hanging off the panel padding, which is gone. */
+.app-shell[data-sidebar='collapsed'] .side-row-wrap::before {
+  left: 0;
+}
+
+.app-shell[data-sidebar='collapsed'] .ws-body {
+  padding-left: 0;
+}
+
+.app-shell[data-sidebar='collapsed'] .ws-head {
+  padding-right: 0;
+}
+
+.app-shell[data-sidebar='collapsed'] .sidebar-foot {
+  padding: 6px 0 12px;
+}
+
+.app-shell[data-sidebar='collapsed'] .foot-button {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+/* -------------------------------------------------------------------- stage */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stage-gap);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/*
+ * The top row of the stage is the tab row: tabs, a drag strip, the panel toggle
+ * and the window buttons share one line, so the terminal starts a full row
+ * higher than it used to. The session identity that used to own a row of its own
+ * still has two homes: the tab (name + status dot) and the terminal's own state
+ * overlay.
+ */
+.stage-head {
+  /*
+   * One gap for the whole row, and one lead: the sidebar toggle plus the gap it
+   * leaves behind. The tab strip measures its own ceiling from that lead (see
+   * `.stage-head[data-sheet='true'] .tabstrip`), so the two values live here,
+   * together, instead of being repeated as pixel guesses in two rules.
+   */
+  --head-gap: 8px;
+  --rail-toggle-size: 30px;
+  --head-lead: calc(var(--rail-toggle-size) + var(--head-gap));
+  display: flex;
+  align-items: center;
+  gap: var(--head-gap);
+  flex: none;
+  height: var(--tabbar-height);
+  -webkit-app-region: drag;
+  /* Ancestor of the sheet's tab row, which is pinned to the sheet's left edge
+     and must be measured against this row, not against the flow it left. */
+  position: relative;
+}
+
+/*
+ * The sidebar toggle opens the row, so it sits at the very left of it: the
+ * control is next to the thing it reveals, not at the bottom of the sidebar.
+ */
+.rail-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--rail-toggle-size);
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  -webkit-app-region: no-drag;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.rail-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rail-toggle:active {
+  transform: scale(0.94);
+}
+
+/*
+ * Drag strip between the last tab and the window controls. It absorbs the
+ * remaining width so there is always somewhere to drag the window, and it never
+ * shrinks below 120px: the tabs scroll instead.
+ */
+.titlebar-drag {
+  flex: 1 1 auto;
+  min-width: 120px;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.titlebar-native-spacer {
+  flex: none;
+  width: 8px;
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.window-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.window-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.window-button:active {
+  transform: scale(0.94);
+}
+
+/* The sheet is open: the toggle wears the same accent as the nav affordances. */
+.window-button[data-open='true'] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.window-button-close:hover {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* --------------------------------------------------------------------- tabs */
+.tabstrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* Shrinks before the drag strip does: a crowded window scrolls its tabs. */
+  flex: 0 1 auto;
+  height: var(--tabbar-height);
+  min-width: 0;
+  padding-left: 2px;
+  -webkit-app-region: no-drag;
+}
+
+/*
+ * With the sheet open, its own tab row is pinned over the sheet's left edge
+ * (see `.side-tabs`), out of the row's flow: the strip would grow underneath
+ * those pills and print its last tab, its `+` and its `▾` behind them.
+ *
+ * So the strip stops where the sheet's column begins, a gap short of the
+ * pills. The top row then reads as two columns - the work area's tabs, then
+ * the sheet's - instead of one line with a hole punched in it. The ceiling is
+ * `max()`ed against one tab's worth of room: on a window narrower than the
+ * sheet, a strip of zero width would hide every tab, so the overlap comes back
+ * there rather than the navigation.
+ */
+.stage-head[data-sheet='true'] .tabstrip {
+  max-width: max(
+    120px,
+    calc(100% - var(--sheet-width) - var(--head-lead) - var(--head-gap))
+  );
+}
+
+.tabstrip-scroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* Content width, not available width: the rail stays next to the last tab. */
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tabstrip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-width: 118px;
+  max-width: 200px;
+  height: var(--tab-height);
+  padding: 0 4px 0 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    border-color var(--dur-press) ease-out;
+}
+
+.tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tab[data-active='true'] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  /* Keeps the pill shape the global focus ring would flatten to 4px. */
+  border-radius: var(--radius-control);
+}
+
+/*
+ * The tab's number: its position in the strip, so the agent composer can name a
+ * terminal ("#3") and the user can see that name is still true. Quiet on a
+ * background tab, accent on the front one, and never wider than two digits'
+ * worth of space - the title is what has to survive a crowded strip.
+ */
+.tab-index {
+  flex: none;
+  min-width: 9px;
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  text-align: right;
+  transition: color var(--dur-press) ease-out;
+}
+
+.tab[data-active='true'] .tab-index {
+  color: var(--accent);
+}
+
+.tab-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--dur-press) ease-out;
+}
+
+.tab[data-active='true'] .tab-actions {
+  opacity: 0.55;
+}
+
+.tab:hover .tab-actions,
+.tab:focus-within .tab-actions {
+  opacity: 1;
+}
+
+.tab-action {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--text-faint);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.tab-action:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.tab-action-close:hover {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------- new-tab rail */
+
+.tab-rail {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 1px;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+.rail-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.rail-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rail-button:active {
+  transform: scale(0.92);
+}
+
+.rail-button[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rail-button-menu {
+  width: 20px;
+  color: var(--text-faint);
+}
+
+.rail-button-menu:hover,
+.rail-button-menu[aria-expanded='true'] {
+  color: var(--text);
+}
+
+.tabstrip-drag {
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+/*
+ * An open inline rename ends on the next press anywhere, but the window's drag
+ * regions are consumed by the frame before the page sees the press. While a
+ * field is open they hand their presses back to the page, so a click there
+ * counts as clicking somewhere else instead of leaving the rename stranded. The
+ * macOS title band is one of them: it is the whole top strip of the window.
+ */
+:root[data-inline-edit='true'] .stage-head,
+:root[data-inline-edit='true'] .titlebar,
+:root[data-inline-edit='true'] .titlebar-drag,
+:root[data-inline-edit='true'] .tabstrip-drag,
+:root[data-inline-edit='true'] .titlebar-band {
+  -webkit-app-region: no-drag;
+}
+
+.status-dot,
+.tab-dot {
+  display: block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.status-dot[data-status='connected'],
+.tab-dot[data-status='connected'] {
+  background: var(--success);
+}
+
+.status-dot[data-status='connecting'],
+.tab-dot[data-status='connecting'] {
+  background: var(--warning);
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+.status-dot[data-status='error'],
+.tab-dot[data-status='error'] {
+  background: var(--danger);
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------ welcome page */
+
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 40px 32px;
+}
+
+.welcome-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  /* Three short rows need no more than this. */
+  max-width: 216px;
+  text-align: center;
+}
+
+/* Mark and name share one line, so the page opens with a single statement. */
+.welcome-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.welcome-mark {
+  display: grid;
+  place-items: center;
+}
+
+.welcome-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  /*
+   * A white card, like the sidebar and every menu. It carries the row hover
+   * fill: --hover is tuned against --surface, and on a --canvas card the two
+   * are one step apart in the light scheme, so the row that is under the
+   * pointer disappears instead of reading as feedback.
+   */
+  background: var(--surface);
+}
+
+.welcome-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+/*
+ * Hover and keyboard focus share one fill; focus adds the accent ring on top,
+ * so a pointer and a Tab key never look like the same thing.
+ */
+.welcome-row:hover,
+.welcome-row:focus-visible {
+  background: var(--hover);
+}
+
+.welcome-row:active {
+  transform: scale(0.99);
+}
+
+.welcome-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: color var(--dur-press) ease-out;
+}
+
+.welcome-row:hover .welcome-row-icon,
+.welcome-row:focus-visible .welcome-row-icon {
+  color: var(--accent);
+}
+
+.welcome-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.welcome-hint {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.welcome-version {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  color: var(--text-faint);
+  font-size: 11px;
+  pointer-events: none;
+}

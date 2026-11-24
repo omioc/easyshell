@@ -1,0 +1,1010 @@
+/*
+ * Text buttons: every action whose label is words — Save, Connect, Paste,
+ * Delete. The ends are fully round, so the shape reads as "press me" at a
+ * glance and never as a field: the pill is the one soft control in a surface
+ * made of rectangles.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--field-height);
+  /* A pill needs a little more room at the ends than a rounded rectangle. */
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    border-color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.icon-button[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+/* ------------------------------------------------------------------- fields */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field[data-inline='true'] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+}
+
+.field-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field[data-inline='true'] .field-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field[data-inline='true'] .field-control {
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+.field-hint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 12px;
+}
+
+/*
+ * The plain field: canvas fill, no hairline at rest. The 1px border stays in the
+ * box model as transparent, so hover and focus only recolour it - the field
+ * never grows or shifts by a pixel when it becomes the one being typed into.
+ */
+.input {
+  width: 100%;
+  height: var(--field-height);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  /* One step above the bare field radius: a filled box reads softer than a line. */
+  border-radius: calc(var(--radius-field) + 1px);
+  background: var(--canvas);
+  color: var(--text);
+  font-size: 12px;
+  transition:
+    border-color var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out;
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+/* Accent drawn on the field's own 1px, not as a ring around it. */
+.input:focus-visible {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.input[data-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/*
+ * Values that are numbers or addresses line their digits up, but they are still
+ * read in the UI's face: the terminal font belongs to the terminal.
+ */
+.input[data-mono='true'] {
+  font-variant-numeric: tabular-nums;
+}
+
+.input[readonly] {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.input-number {
+  width: 88px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.input-with-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.input-with-action .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * The button beside a field keeps its own width and one line of label: the row
+ * would otherwise shrink it until the text breaks in half.
+ */
+.input-with-action > .button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/*
+ * Dropdown trigger. Same skin as `.input` - canvas fill, no hairline at rest,
+ * same height - so a column of fields reads as one set of controls; opening it
+ * recolours the transparent 1px edge to the accent. The arrow is ours, which is
+ * the entire reason this is not a `<select>`.
+ */
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--field-height);
+  min-width: 148px;
+  max-width: 260px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-field);
+  background: var(--canvas);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  transition:
+    border-color var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out;
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.select:focus-visible {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* Open, the trigger takes the accent and the arrow turns over: the state is on
+   the control that owns it, not only on the list hanging below. */
+.select[data-open='true'] {
+  border-color: var(--accent);
+}
+
+.select:disabled {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.select-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.select > svg {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 160ms var(--ease-out);
+}
+
+.select[data-open='true'] > svg {
+  transform: rotate(180deg);
+}
+
+/* The list itself: the app's popover, with the same rows as a menu. It sits
+   above the dialog scrim (70), because a dropdown also opens inside the
+   connection editor, and below the tooltip layer (80). */
+.select-menu {
+  z-index: 75;
+  min-width: 0;
+  padding: 4px;
+}
+
+.select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.select-option:hover {
+  background: var(--hover);
+}
+
+.select-option:focus-visible {
+  outline: none;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.select-option[aria-selected='true'] {
+  background: var(--accent-wash);
+}
+
+.select-option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.select-option > svg {
+  flex: none;
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------- switch/segmented */
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 32px;
+  height: 18px;
+}
+
+.switch-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  pointer-events: none;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--canvas);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+.switch-input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch-input:checked + .switch-track .switch-thumb {
+  transform: translateX(14px);
+}
+
+.switch-input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.segmented {
+  display: inline-flex;
+  /*
+   * Hugs its options. `.field-control` is a column flex, whose default stretch
+   * was pulling the box out to the full form width; the border should close
+   * around the choices, not around empty space.
+   */
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  /* The field radius: the box reads as one of the inputs beside it. */
+  border-radius: var(--radius-field);
+  background: var(--surface);
+}
+
+.segmented-option {
+  position: relative;
+  display: inline-flex;
+}
+
+.segmented-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented-option span {
+  padding: 3px 10px;
+  /* Inside a 4.5px corner the chip keeps a smaller radius of its own. */
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.segmented-option[data-selected='true'] span {
+  background: var(--elevated);
+  color: var(--text);
+  box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.segmented-option input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* ------------------------------------------------------------ settings shell */
+
+/*
+ * Settings is a page, not a dialog: it takes the main area the terminal normally
+ * fills, so it wears the terminal card's frame instead of being a centred box.
+ */
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/*
+ * No rule under the title. The sidebar's brand row does not have one either, and
+ * the page is one surface: a line there only drew a box inside the card.
+ */
+.settings-page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: none;
+  padding: 14px 10px 8px 18px;
+}
+
+.settings-page-title {
+  flex: none;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.settings-page-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The close button is a control, not a line of text: it centres on the row. */
+.settings-page-head .icon-button {
+  flex: none;
+  align-self: center;
+}
+
+.modal-new-session {
+  width: 460px;
+  max-width: 100%;
+}
+
+.new-session-body {
+  gap: 16px;
+}
+
+.settings-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * The page list borrows the sidebar's row wholesale: 36px tall, a 16px glyph,
+ * a 13px label, 10px between them, the same 9px radius and the same accent wash
+ * on the current page. A second rhythm for the same kind of navigation would
+ * only teach the eye that these two lists are unrelated.
+ */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+  width: 180px;
+  padding: 10px;
+  /* No divider either: the list is separated from the page by space, not a
+     line, exactly like the sidebar next to the terminal card. */
+  overflow-y: auto;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.settings-nav-item:hover {
+  background: var(--hover);
+}
+
+.settings-nav-item:active {
+  transform: scale(0.995);
+}
+
+.settings-nav-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: color var(--dur-press) ease-out;
+}
+
+.settings-nav-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The current page is marked by the wash and the accent glyph, never by a
+   colour change on the label: the text stays as readable as the rest. */
+.settings-nav-item[data-active='true'] {
+  background: var(--accent-wash);
+}
+
+.settings-nav-item[data-active='true'] .settings-nav-icon {
+  color: var(--accent);
+}
+
+.settings-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 16px 20px 24px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+
+/* Font size, line height and letter spacing: one family of three metrics. */
+.settings-field-row[data-columns='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-block-title {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-note {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+/* ------------------------------------------------------------ scheme picker */
+
+.scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/*
+ * The picker offers schemes, not pictures of schemes: the card is the frame and
+ * the swatch is the terminal that scheme would give you. Nothing here draws
+ * chrome the app itself never uses - the old card put a second window inside the
+ * first, with a fake title bar and traffic lights on every scheme.
+ */
+.scheme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  text-align: left;
+  transition:
+    border-color var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+.scheme-card:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.scheme-card:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.scheme-card[data-selected='true'] {
+  border-color: var(--accent);
+}
+
+/*
+ * A scheme from the other mode is not offered: picking it would only make the
+ * window swap in the scheme that already matches the theme it is in.
+ */
+.scheme-card:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.scheme-swatch {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 5px;
+  height: 34px;
+  padding: 7px 8px;
+  /* Sits inside the card's corner instead of carrying a frame of its own. */
+  border-radius: 3px;
+}
+
+.scheme-swatch-bar {
+  display: block;
+  width: 32%;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.scheme-swatch-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.scheme-swatch-dots span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+/* Name and tick on one line: the same pair every other card in settings uses. */
+.scheme-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 14px;
+  color: var(--accent);
+}
+
+.scheme-name {
+  display: block;
+  min-width: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------ shell profiles */
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * The add button sits *under* the profile rows, not inside the grid: it is a
+ * control, so it keeps its own width instead of stretching across a column
+ * sized for four inputs.
+ */
+.profile-add {
+  align-self: flex-start;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.3fr) 24px;
+  gap: 6px;
+  align-items: center;
+}
+
+.profile-row-head {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.profile-row-head > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* ------------------------------------------------------------------ identity */
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  transition:
+    border-color var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.chip[data-active='true'] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.identity-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.identity-result {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.identity-result[data-tone='ok'] {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.identity-result[data-tone='warn'] {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.identity-result[data-tone='error'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------- terminal preview */
+
+.term-preview {
+  position: relative;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--terminal-bg);
+  /* Terminal surface, terminal text: `--text` is tuned for the sheet and would
+     vanish on this card in a light scheme. */
+  color: var(--terminal-fg);
+  overflow: hidden;
+}
+
+.term-preview-label {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.term-preview-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.term-preview-path {
+  color: var(--success);
+}
+
+.term-preview-sep {
+  color: var(--text-muted);
+}
+
+.term-preview-prompt {
+  margin-left: 2px;
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------- agent CLI cards */
+
+.settings-cli {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-cli-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-cli-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-cli-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-cli-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  gap: 8px;
+}
+
+.settings-cli-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 11px 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  transition:
+    border-color var(--dur-out) var(--ease-out),
+    background-color var(--dur-out) var(--ease-out);
+}
+
+.settings-cli-card[data-state='available']:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.settings-cli-card[data-state='available']:active {
+  transform: scale(0.995);
+}
+
+.settings-cli-card[data-selected='true'] {
+  border-color: var(--accent);
+}
+
+.settings-cli-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.settings-cli-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+}
+
+.settings-cli-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/*
+ * Two lines each, always. A grid row is as tall as its tallest card, so copy
+ * that happened to run long used to stretch every card beside it; the clamp
+ * holds the shape and the tooltip carries the rest of the sentence.
+ */
+.settings-cli-desc,
+.settings-cli-foot {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* Two lines' worth of height even when the text is shorter than that. */
+  min-height: 2lh;
+  overflow-wrap: anywhere;
+}
+
+.settings-cli-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.settings-cli-state {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  background: var(--hover);
+}
+
+.settings-cli-state[data-state='available'] {
+  color: var(--accent);
+}
+
+.settings-cli-state[data-state='adapter-missing'] {
+  color: var(--warn);
+}
+
+.settings-cli-state[data-state='unsupported'] {
+  color: var(--text-faint);
+}
+
+.settings-cli-foot {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+.settings-cli-path {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.settings-cli-custom {
+  margin-top: 2px;
+}
+
+.settings-cli-custom > summary {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.settings-cli-custom[open] > summary {
+  color: var(--text);
+}

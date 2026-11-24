@@ -1,0 +1,4 @@
+<!-- Angle brackets: the local API speaks HTTP and JSON. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M5.7 5.1 2.7 8l3 2.9M10.3 5.1 13.3 8l-3 2.9M9.2 3.5 6.8 12.5" />
+</svg>

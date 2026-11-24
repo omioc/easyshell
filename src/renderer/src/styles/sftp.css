@@ -1,0 +1,387 @@
+/*
+ * The file sheet: the third thing the right dock can show.
+ *
+ * It is built from the same parts as the rest of the app - one hairline border,
+ * 30px controls, 7px chips, 12.5px rows - because it is a peer of the session
+ * sheet, not a second application inside it. The only new geometry is the path
+ * bar: a breadcrumb that scrolls sideways instead of wrapping, so a deep path
+ * never turns the header into three lines of text.
+ */
+
+.sftp-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  padding: 10px 12px 6px;
+}
+
+/* Where these files live. One line, so the sheet always answers "which machine
+   am I looking at" before it answers anything else. */
+.sftp-host {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.sftp-host-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.sftp-host-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* The nesting badge is a statement of fact, not an alarm: muted, small, and it
+   only exists when the login chain moved away from the host the files are on. */
+.sftp-host-badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sftp-path {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--field-height);
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+}
+
+.sftp-crumbs {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.sftp-crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.sftp-crumb-item {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.sftp-crumb-sep {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.sftp-crumb {
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+  font-size: 12px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) ease-out;
+}
+
+.sftp-crumb:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.sftp-crumb:active {
+  transform: scale(0.97);
+}
+
+/* The folder on screen is the end of the trail; every crumb before it is a way
+   back. */
+.sftp-crumb[data-current='true'] {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.sftp-follow {
+  flex: none;
+}
+
+.sftp-follow[aria-pressed='false'] {
+  color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------- the list */
+
+.sftp-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 6px 8px;
+  overflow-y: auto;
+  outline: none;
+}
+
+.sftp-list:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-chip);
+}
+
+.sftp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  font-size: 12.5px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.sftp-row:hover {
+  background: var(--hover);
+}
+
+.sftp-row[data-selected='true'] {
+  background: var(--accent-wash);
+}
+
+.sftp-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  color: var(--text-faint);
+}
+
+.sftp-row[data-dir='true'] .sftp-row-icon {
+  color: var(--accent);
+}
+
+.sftp-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sizes are a column, so they are tabular and right-aligned by construction. */
+.sftp-row-size {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The row being named does not highlight its file: the caret is the focus. */
+.sftp-row-editor {
+  background: var(--canvas);
+}
+
+.sftp-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.sftp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 16px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.sftp-empty-title {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.sftp-empty-hint {
+  max-width: 220px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.sftp-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 2px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------- drops */
+
+/* A dashed frame over the list rather than a modal: the target is the folder
+   already on screen, and nothing else has to be chosen. */
+.sftp-drop {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 12px;
+  pointer-events: none;
+  animation: sftp-drop-in 140ms var(--ease-out);
+}
+
+@keyframes sftp-drop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+/* -------------------------------------------------------------- transfers */
+
+.sftp-transfers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding: 8px 12px 0;
+}
+
+.sftp-transfer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.sftp-transfer-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.sftp-transfer-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sftp-transfer-value {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.sftp-transfer-bar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.sftp-transfer-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  /* Progress is constant motion, so it eases linearly: width changes are read
+     as speed, and an eased bar reads as a stutter. */
+  transition: width var(--dur-press) linear;
+}
+
+.sftp-transfer[data-done='true'] .sftp-transfer-fill {
+  background: var(--text-faint);
+}
+
+.sftp-transfer[data-error='true'] {
+  color: var(--danger);
+}
+
+.sftp-transfer[data-error='true'] .sftp-transfer-fill {
+  background: var(--danger);
+}
+
+/* ------------------------------------------------------------------ footer */
+
+/* The rule above the toolbar is inset like every other hairline in the dock. */
+.sftp-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 8px 10px;
+}
+
+.sftp-foot::before {
+  position: absolute;
+  top: 0;
+  right: var(--divider-inset);
+  left: var(--divider-inset);
+  height: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.sftp-foot-status {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

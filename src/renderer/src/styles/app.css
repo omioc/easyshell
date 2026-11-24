@@ -1,0 +1,48 @@
+/*
+ * EasyShell renderer styles.
+ *
+ * Design contract
+ * ---------------
+ * Mission      A calm, precise terminal utility. One tinted canvas holds two
+ *              cards: a white sidebar that owns navigation, and a dark terminal
+ *              card that owns the work. The chrome recedes so output leads.
+ * Color        Semantic CSS variables only, written by lib/theme.ts from the
+ *              active ColorScheme (ui tokens + --terminal-bg / --terminal-fg).
+ *              never hardcodes a colour; shadows and scrims are derived per
+ *              scheme.
+ * Type         System UI stack for chrome. 10.5-11px for badges, keys and menu
+ *              sections, 12.5-13px for controls, rows and body, 18px for the
+ *              app name. Tabular numerals for every timestamp, byte count and
+ *              port.
+ * Spacing      4px grid, 8px base rhythm; one 10px gutter between the cards.
+ * Radius       Half a control radius (4.5px) for text fields and dropdown
+ *              triggers, 9px controls, 12px menus, 14px dialogs, 16px cards.
+ *              Chips and text buttons are pills: the ends are fully round.
+ * Motion       Only menus, popovers, cards and toasts move: 180ms
+ *              cubic-bezier(0.23, 1, 0.32, 1) in, ~120ms out, with the
+ *              transform-origin taken from the trigger. Buttons press to
+ *              scale(0.94-0.97) over 140ms. Tab and session switching never
+ *              animates.
+ * Focus        A 2px --accent ring for controls; a focused field takes a 1px
+ *              accent line instead, so it changes colour rather than growing one.
+ * Do           1px hairlines from --border, one soft shadow on raised surfaces,
+ *              reflow long values instead of clipping them.
+ * Surfaces     Sidebar rows, menu rows and connection rows share one rhythm:
+ *              30-44px rows, 1px hairlines, 4-6px inner padding, no fills that
+ *              compete with the terminal.
+ * Don't        Gradients, shadowed flat surfaces, transitioning layout, motion
+ *              on keyboard-frequency actions, overflow hiding a layout defect.
+ */
+
+/* The faces the app ships. First, because every other sheet names them. */
+@import './fonts.css';
+
+@import './tokens.css';
+@import './chrome.css';
+@import './terminal.css';
+@import './overlays.css';
+@import './panel.css';
+@import './agent.css';
+@import './settings.css';
+@import './connections.css';
+@import './sftp.css';

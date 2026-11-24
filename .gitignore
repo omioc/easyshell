@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output: the Vite bundles and the electron-builder targets
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# Test artifacts: screenshots and profiles written by the end-to-end runs
+.e2e/
+coverage/
+.vite/
+
+# Browser tool output: Playwright MCP writes its console logs here on every run.
+.playwright-mcp/
+
+# Design documentation and mockups are kept out of version control on purpose.
+# The brand images the app and the packager actually consume stay tracked:
+# logo.png (master), src/renderer/src/assets, src/renderer/public, build/icon.png.
+/docs/
+
+# Local machine settings
+.env
+.env.*
+!.env.example
+
+# The check:data denylist holds account and machine names that must never reach
+# a tracked file, so it stays local to this machine.
+demo-deny.local.json
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*

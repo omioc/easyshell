@@ -1,0 +1,523 @@
+/*
+ * Menus, dialogs and toasts.
+ *
+ * Everything floats above the canvas as a white card with one soft shadow. Menus
+ * grow out of their trigger and shut faster than they open; dialogs stay centred
+ * and only scale a hair, because nothing about a dialog comes from a corner.
+ */
+
+.popover {
+  position: fixed;
+  z-index: 60;
+  min-width: 200px;
+  padding: 5px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+  will-change: opacity, transform;
+}
+
+.popover[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+.popover[data-shown='false'] {
+  transition-duration: var(--dur-out);
+}
+
+/* Submenu that grows to the right of the item that opened it. Long lists scroll
+   on their own and the scrollbar stays invisible, so the surface reads as one
+   card however many workspaces there are. */
+.menu-flyout {
+  z-index: 61;
+  opacity: 1;
+  transform: none;
+  max-height: min(320px, 62vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.menu-flyout::-webkit-scrollbar {
+  display: none;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.menu-item:hover {
+  background: var(--hover);
+}
+
+.menu-item:focus-visible {
+  outline: none;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.menu-item[data-tone='danger'] {
+  color: var(--danger);
+}
+
+.menu-item-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.menu-item[data-tone='danger'] .menu-item-icon {
+  color: var(--danger);
+}
+
+.menu-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menu-item-shortcut {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* Trailing affordance for an item that opens a nested list. */
+.menu-item-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-left: 2px;
+  color: var(--text-faint);
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 5px 7px;
+  background: var(--border);
+}
+
+/* ------------------------------------------------------- rich menu entries */
+
+.popover-new {
+  width: 300px;
+  max-height: min(70vh, 540px);
+  padding: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-section {
+  padding: 9px 9px 4px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Inline "are you sure" block: replaces the item list so the destructive
+   choice never sits one click away from a harmless one. */
+.menu-confirm {
+  max-width: 236px;
+  padding: 9px 9px 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  color: var(--text);
+  text-align: left;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.menu-row:hover {
+  background: var(--hover);
+}
+
+.menu-row:focus-visible {
+  outline: none;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.menu-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.menu-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.menu-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menu-row-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.menu-row-dot[data-status='connected'] {
+  background: var(--success);
+}
+
+.menu-row-dot[data-status='error'] {
+  background: var(--danger);
+}
+
+.menu-row-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------------ dialogs */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--dur-in) var(--ease-out);
+}
+
+.scrim[data-shown='true'] {
+  opacity: 1;
+}
+
+.scrim[data-shown='false'] {
+  transition-duration: var(--dur-out);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 64px);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-raised);
+  outline: none;
+  opacity: 0;
+  transform: scale(0.98);
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+}
+
+.modal[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+.modal[data-shown='false'] {
+  transition-duration: var(--dur-out);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding: 14px 16px;
+  position: relative;
+}
+
+/*
+ * The hairline stops short of the dialog's edges like every other divider in
+ * the app: a rule that runs edge to edge reads as the dialog's frame, not as a
+ * separation.
+ */
+.modal-header::after {
+  position: absolute;
+  right: var(--divider-inset);
+  bottom: 0;
+  left: var(--divider-inset);
+  height: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: none;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-note {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+/*
+ * The paste gate: the exact text that would reach the shell, in the terminal's
+ * own typeface. It scrolls instead of growing, so a long block can never push
+ * the buttons off the dialog.
+ */
+.modal-paste {
+  width: min(560px, calc(100vw - 64px));
+}
+
+/*
+ * The buttons sit under the preview's own frame; a second hairline between them
+ * would box the dialog in instead of separating anything. Without that line the
+ * footer only has to hold the gap, and the body's own bottom padding already
+ * provides it: keeping both would leave 28px of empty band above the buttons.
+ */
+.modal-paste .modal-footer {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.paste-preview {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--terminal-bg);
+  color: var(--terminal-fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ------------------------------------------------------------------- toasts */
+
+.toast-stack {
+  /* Anchored to the terminal, not the window: a notice belongs to the session it
+     talks about, and it stays clear of the sheet when that opens. */
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  /* The stack itself must not eat clicks on the terminal behind it. */
+  pointer-events: none;
+}
+
+/*
+ * A toast is one sentence with a status glyph in front of it. The glyph is
+ * inline in that sentence — not a column beside it — so a second line starts at
+ * the toast's own left edge and runs under the icon. The status lives entirely
+ * in the glyph's colour; the surface itself stays neutral, because a coloured
+ * edge turns a notice into a stripe and the stripe says nothing the icon does
+ * not say more precisely.
+ */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 380px;
+  padding: 6px 4px 6px 9px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-raised);
+  color: var(--text);
+  font-size: 12.5px;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.99);
+  transition:
+    opacity var(--dur-in) ease-out,
+    transform var(--dur-in) var(--ease-out);
+}
+
+.toast[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+.toast[data-shown='false'] {
+  transition-duration: var(--dur-out);
+}
+
+.toast-icon {
+  /* The glyph rides inside the first line's text box instead of taking a column
+     of its own. `-2px` drops it off the baseline so its centre sits on the cap
+     height, where the eye expects it; `line-height: 1` keeps the glyph's own
+     strut out of the line box, so line one stays as tall as the lines below. */
+  margin-right: 5px;
+  line-height: 1;
+  vertical-align: -2px;
+  color: var(--text-muted);
+}
+
+.toast[data-level='success'] .toast-icon {
+  color: var(--success);
+}
+
+.toast[data-level='warn'] .toast-icon {
+  color: var(--warning);
+}
+
+.toast[data-level='error'] .toast-icon {
+  color: var(--danger);
+}
+
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--text-faint);
+}
+
+.toast-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------------- tooltips */
+
+/*
+ * The hover hint. Same family as the menus - elevated card, one hairline, one
+ * soft shadow - but a step smaller and never interactive, so it can sit on top
+ * of anything without stealing the pointer.
+ *
+ * 125ms and a scale from 0.97: at this size a longer or larger move turns a
+ * hint into a small dialog appearing. It grows out of the element it describes
+ * (transform-origin is set inline from the measured placement).
+ */
+.tooltip {
+  position: fixed;
+  z-index: 80;
+  max-width: 320px;
+  padding: 4px 8px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-raised);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.97);
+  transition:
+    opacity 125ms var(--ease-out),
+    transform 125ms var(--ease-out);
+}
+
+.tooltip[data-shown='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * No tooltips while a sidebar row is in flight (or settling): the label belongs
+ * to a row that is being carried somewhere else, and it would land on top of the
+ * gap it is opening. `data-row-dragging` is set on <body> for that stretch.
+ */
+body[data-row-dragging] .tooltip {
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+
+/* The shortcut rides on the same line as the label, one step quieter. */
+.tooltip-kbd {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 10.5px;
+}

@@ -1,0 +1,10 @@
+# Normalize line endings so a Windows checkout and a Linux checkout of the same
+# commit hold the same bytes: text is stored as LF, binaries are left untouched.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.zip binary
+*.exe binary

@@ -1,0 +1,55 @@
+appId: com.easyshell.app
+productName: EasyShell
+directories:
+  buildResources: build
+  output: release
+# Only `dependencies` from package.json reach the package, and only four things
+# have to be there: ssh2, ws, resedit and @lydell/node-pty, which the main and
+# preload bundles load from node_modules at run time (electron-vite externalises
+# them). Everything the renderer imports -- react, @xterm/*, react-markdown,
+# remark-gfm -- is bundled into out/renderer by vite, so it belongs in
+# devDependencies; keeping it in `dependencies` copies a second, unused copy of
+# the whole Markdown/React tree into app.asar and floods the build log with
+# "duplicate dependency references".
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  # cpu-features links libnode.dll, which Electron does not ship, so the native
+  # module can never load here; ssh2 already falls back to pure JS. Excluding it
+  # drops its whole C source tree (~10 MB unpacked).
+  - '!**/node_modules/cpu-features/**'
+asar: true
+# `maximum` runs 7z at -mx=9 over the ~360 MB Electron runtime that every build
+# recompresses (app.asar is only ~13 MB of the 373 MB payload). Measured on an
+# i5-12490F / NVMe: one zip target took 495 s with `maximum` and 77 s with
+# `normal`, for 149.4 MB vs 149.7 MB of output. Shipping builds that really want
+# the last 0.2% use `npm run dist:win:release`, which overrides this back to
+# `maximum` on the command line.
+compression: normal
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+asarUnpack:
+  - '**/node_modules/@lydell/node-pty*/**'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+    # A plain folder-in-a-zip for "copy to another machine and run".
+    - target: zip
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: EasyShell
+mac:
+  category: public.app-category.developer-tools
+  target: [dmg]
+  hardenedRuntime: false
+linux:
+  category: Development
+  target: [AppImage, deb]

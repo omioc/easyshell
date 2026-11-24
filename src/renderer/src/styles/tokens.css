@@ -1,0 +1,204 @@
+/*
+ * Design tokens.
+ *
+ * The shell reads as one calm sheet of paper: a tinted canvas, white cards with
+ * a single hairline border, and a dark terminal card that anchors the right
+ * side. Every surface is built from these values, so the whole app moves
+ * together when the scheme changes.
+ */
+:root {
+  /* Radii: chips inside rows, controls, menus, then cards. */
+  --radius-chip: 7px;
+  --radius-control: 9px;
+  /*
+   * Text fields and dropdown triggers: half a control radius, so a field reads
+   * as a line of text you type into rather than as a button you press.
+   */
+  --radius-field: calc(var(--radius-control) / 2);
+  --radius-menu: 12px;
+  --radius-surface: 14px;
+  --radius-card: 16px;
+
+  /* Motion. Fast enough to feel like feedback, never like waiting. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-in: 180ms;
+  --dur-out: 120ms;
+  --dur-press: 140ms;
+
+  /* Metrics. */
+  --tabbar-height: 38px;
+  --tab-height: 30px;
+  --stage-gap: 6px;
+  --sidebar-width: 268px;
+  /* How many session rows fit before that list starts scrolling. */
+  --session-rows: 7;
+  /* Collapsed: the icons keep their rows, the labels are gone. */
+  --sidebar-width-collapsed: 56px;
+  --shell-gap: 10px;
+  /*
+   * macOS only: the band at the top of the window that belongs to the traffic
+   * lights. Zero everywhere else, where the window buttons live in the stage
+   * row; the shell reads it as extra top padding.
+   */
+  --titlebar-strip: 0px;
+  --field-height: 30px;
+  /*
+   * Width of the docked right sheet. Its tab row is pinned to this edge, so the
+   * two must be read from the same number.
+   */
+  --sheet-width: 400px;
+
+  /*
+   * How far a divider stops short of the surface's edges. One number for every
+   * hairline in the app, so panels, docks and dialogs read as one family.
+   */
+  --divider-inset: 16px;
+
+  /*
+   * The app's own faces, shipped with it: Noto Sans for Latin/Greek/Cyrillic
+   * with Noto Sans SC behind it for Chinese. Same type on all three platforms,
+   * usable for every language this UI speaks.
+   */
+  --font-ui: 'Noto Sans Variable', 'Noto Sans SC Variable', system-ui, sans-serif;
+  /*
+   * Sarasa Mono: a Latin monospace merged with Source Han Sans, so CJK output in
+   * a terminal keeps its columns. The terminal itself takes its family from the
+   * appearance setting; this is the one every other mono surface uses.
+   */
+  --font-mono: 'Sarasa Mono SC', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --shadow-raised:
+    0 22px 44px -24px var(--shadow-color),
+    0 2px 8px -3px var(--shadow-color);
+  --shadow-card:
+    0 1px 2px -1px var(--shadow-color),
+    0 10px 26px -20px var(--shadow-color);
+  --shadow-terminal: 0 24px 60px -34px rgba(12, 18, 32, 0.55);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Chrome stays inert, content stays copyable. */
+pre,
+code,
+input,
+textarea,
+.agent-text,
+.agent-markdown,
+.info-value,
+.info-raw,
+.toast-text,
+.identity-result,
+.xterm {
+  user-select: text;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+dt {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  -webkit-app-region: no-drag;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.boot {
+  height: 100%;
+  background: var(--canvas);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

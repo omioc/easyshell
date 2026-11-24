@@ -1,0 +1,1789 @@
+/*
+ * Agent task sheet.
+ *
+ * Contract
+ * --------
+ * Mission    The right column of an ACP agent: the task list, one conversation
+ *            and the commands waiting for a decision. It is a fixed slice of
+ *            the window (`--sheet-width`), so every row reflows instead of
+ *            clipping.
+ * Color      Semantic tokens only. Risk is a text tone, never a saturated fill
+ *            that competes with the terminal next to it.
+ * Type       10-11px for badges, statuses and meta; 12-12.5px body; mono for
+ *            commands and output only.
+ * Spacing    4px grid: 2/6/8px inside rows, 8/10/12/14px between blocks.
+ * Motion     Three things enter: the approval card (180ms, 4px up), a composer
+ *            dropdown (180ms, from 0.97, growing out of its trigger) and a
+ *            transcript row (180ms fade, no movement - a list that mounts all
+ *            at once should settle, not swing). The loading skeleton pulses on
+ *            opacity only. The task list, the composer itself and tab switches
+ *            never animate.
+ * Do         `overflow-wrap: anywhere` on every command, title and output.
+ * Don't      Animate height or padding, `transition: all`, linear stateful
+ *            movement, or overflow clipping that hides a layout defect.
+ */
+
+.agent-list,
+.agent-conv {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.agent-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+/*
+ * The conversation sits under a hairline. The gap belongs to the scroll
+ * viewport itself, not to the first row: padding inside the scroller would
+ * scroll away with the content, and text would ride up under the rule.
+ */
+.agent-conv .agent-scroll {
+  margin-top: 12px;
+}
+
+/*
+ * The transcript and its way back to the end share one box.
+ *
+ * The button has to cover the last lines rather than sit beside them, so the
+ * scroller and the button are siblings inside a positioned parent.
+ */
+.agent-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * Rows settle in rather than snapping on.
+ *
+ * A stored transcript mounts every row in one commit, so without this the sheet
+ * goes from empty to full between two frames. 180ms of opacity, no movement:
+ * the transcript is what the user is about to read, and it should not travel
+ * while the scroll position is being pinned to its end.
+ */
+.agent-conv .agent-scroll > * {
+  transition: opacity var(--dur-in) var(--ease-out);
+}
+
+@starting-style {
+  .agent-conv .agent-scroll > * {
+    opacity: 0;
+  }
+}
+
+/*
+ * The list header is the same row shape as the sidebar's section heads: a name
+ * on the left, the one action on the right. The action is a single control -
+ * a plus and a caret inside one button - because clicking it is the everyday
+ * path (a temporary session) and hovering it only reveals the rarer one.
+ */
+.agent-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding: 10px 14px 4px 16px;
+}
+
+.agent-list-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.agent-new-wrap {
+  position: relative;
+  flex: none;
+}
+
+/* Ghost, not a filled primary button: the sheet already has one loud surface
+   (the composer) and a second accent block up here fights it. */
+.agent-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.agent-new:hover,
+.agent-new-wrap[data-open='true'] .agent-new {
+  background: var(--hover);
+  color: var(--accent);
+}
+
+.agent-new:active {
+  transform: scale(0.94);
+}
+
+/* The caret is a second glyph, not a second button: it turns over when the
+   options are showing and never takes a click of its own. */
+.agent-new svg:last-child {
+  color: currentColor;
+  opacity: 0.65;
+  transition: transform 160ms var(--ease-out);
+}
+
+.agent-new-wrap[data-open='true'] .agent-new svg:last-child {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-new svg:last-child {
+    transition: none;
+  }
+}
+
+/* The options: the app's floating surface, hung from the right edge of the
+   button so it never runs off the sheet. */
+.agent-new-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 248px;
+  padding: 4px;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  box-shadow: var(--shadow-raised);
+  transform-origin: top right;
+  animation: agent-menu-in var(--dur-in) var(--ease-out);
+}
+
+@keyframes agent-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.agent-new-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.agent-new-item:hover,
+.agent-new-item:focus-visible {
+  background: var(--hover);
+}
+
+.agent-new-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.agent-new-item-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
+.agent-new-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-new-item-name {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.agent-new-item-hint {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Which project a task works in: shown in the list and in the conversation head. */
+.agent-task-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- task list */
+
+/* The rows hang 10px into the scroll padding, so their own 12px keeps the text on
+   the same left edge as the header title - the sidebar's trick, same reason. */
+.agent-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 -10px;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * One row, two lines: who it is (dot, title) and what it is (mode, state, how
+ * much it has done). The right lane - time above, remove below - is reserved by
+ * the button's padding, so a column of rows reads as a table without drawing one.
+ */
+.agent-task {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+}
+
+.agent-task:hover {
+  background: var(--hover);
+}
+
+.agent-task-open {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* The right padding is the time/trash column's lane. */
+  padding: 10px 46px 10px 12px;
+  border-radius: var(--radius-control);
+  text-align: left;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+.agent-task-open:active {
+  transform: scale(0.995);
+}
+
+.agent-task-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.agent-task-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+/* The time and the trash share this lane and its right edge, one over the other:
+   hovering must not slide the row, so the column is reserved instead of grown. */
+.agent-task-side {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.agent-task-side > * {
+  pointer-events: auto;
+}
+
+.agent-task-time {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* Indented past the dot, so the second line hangs under the title. */
+.agent-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 13px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/*
+ * In the list the mode is a chip, so a column of rows tells "temporary" from
+ * "this project" at a glance. In the conversation head the same class stays
+ * plain text: there it is context, not a category.
+ */
+.agent-task .agent-task-mode {
+  flex: 0 1 auto;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: var(--radius-chip);
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.agent-task .agent-task-mode[data-project='true'] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* The remove button stays out of the way until the row is hovered or focused. */
+.agent-task-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  /* The box hangs right far enough that the 13px glyph ends on the time's own
+     right edge: the two read as one column, not as two ragged ones. */
+  margin-right: -3.5px;
+  border-radius: 6px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition:
+    opacity var(--dur-press) ease-out,
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.agent-task:hover .agent-task-close,
+.agent-task-close:focus-visible {
+  opacity: 1;
+}
+
+.agent-task-close:hover {
+  background: var(--hover);
+  color: var(--danger);
+}
+
+.agent-dot {
+  display: block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.agent-dot[data-status='idle'] {
+  background: var(--success);
+}
+
+.agent-dot[data-status='starting'],
+.agent-dot[data-status='running'] {
+  background: var(--accent);
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+.agent-dot[data-status='waiting'] {
+  background: var(--warning);
+}
+
+.agent-dot[data-status='error'] {
+  background: var(--danger);
+}
+
+.agent-dot[data-status='closed'] {
+  background: var(--border-strong);
+}
+
+.agent-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 2px;
+}
+
+.agent-empty-title {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.agent-empty-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------ conversation */
+
+/*
+ * One line: the way back, the name of what is open, then the state. The rule
+ * under it is inset from both edges - a full-bleed line boxes the header off
+ * from the transcript it belongs to, and the sheet is one surface.
+ */
+.agent-conv-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 10px 12px 10px 10px;
+}
+
+.agent-conv-head::after {
+  position: absolute;
+  right: var(--divider-inset);
+  bottom: 0;
+  left: var(--divider-inset);
+  height: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.agent-back svg {
+  transform: rotate(180deg);
+}
+
+/* The name takes what is left and ends in an ellipsis; the state never moves. */
+.agent-conv-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.agent-conv-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/*
+ * A message is a stack: who said it, then the words. The name sits outside the
+ * bubble, on the speaker's own edge - right for the user, left for the agent -
+ * so the label never merges into the text it introduces.
+ */
+.agent-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.agent-msg[data-role='agent'] {
+  align-items: flex-start;
+  padding: 0 2px;
+}
+
+.agent-msg[data-role='user'] {
+  align-items: flex-end;
+  align-self: flex-end;
+  max-width: 88%;
+}
+
+/*
+ * A message column sizes its children to their own content, so one line that
+ * cannot break - a path, a command, a URL - would stretch the markdown block to
+ * its max-content width and drag a horizontal scrollbar across the whole sheet.
+ * Capping every child at the column keeps wide content scrolling inside its own
+ * frame, which is where sideways scrolling belongs.
+ */
+.agent-msg > * {
+  max-width: 100%;
+}
+
+/* The bubble is the words only: the name above already said whose they are. */
+.agent-msg-bubble {
+  padding: 6px 9px;
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+}
+
+.agent-msg[data-role='system'] {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.agent-msg-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.agent-msg[data-role='user'] .agent-msg-label {
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+/* Plain text: newlines survive and no markdown pass runs — the user's own words
+   are shown as they were typed. */
+.agent-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A stored transcript is read from disk before it can be shown.
+ *
+ * Message-shaped blocks stand in for it - not a spinner and not an empty sheet -
+ * so the panel already has the shape it is about to have and nothing jumps when
+ * the real rows land. The pulse is opacity only: anything that changes size
+ * here would move the scroll position the loaded transcript is pinned to.
+ */
+.agent-skeleton {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 2px 2px 6px;
+}
+
+/* Spoken, not drawn: the shape says it visually, this is what a reader hears. */
+.agent-skeleton-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.agent-skeleton-block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.agent-skeleton-line {
+  height: 9px;
+  border-radius: 4px;
+  background: var(--border);
+  animation: agent-skeleton-pulse 1.5s var(--ease-in-out) infinite;
+}
+
+/* Widths describe a paragraph, not a block: the eye reads it as prose. */
+.agent-skeleton-line[data-width='label'] {
+  width: 26%;
+  height: 6px;
+}
+
+.agent-skeleton-line[data-width='full'] {
+  width: 92%;
+}
+
+.agent-skeleton-line[data-width='wide'] {
+  width: 78%;
+}
+
+.agent-skeleton-line[data-width='short'] {
+  width: 46%;
+}
+
+/* The wave runs down the block, 60ms apart: still water, not a strobe. */
+.agent-skeleton-line:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.agent-skeleton-line:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.agent-skeleton-line:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+@keyframes agent-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion keeps the shape and drops the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-skeleton-line {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/*
+ * Markdown in the transcript.
+ *
+ * The sheet is 400px wide and the agent writes whole documents, so everything
+ * here is sized for prose that wraps: blocks get 8px of breathing room, code
+ * scrolls sideways instead of pushing the panel, and tables do the same inside
+ * their own frame.
+ */
+.agent-markdown {
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* The first and last block sit flush: the message's own stack owns the gaps. */
+.agent-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.agent-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.agent-markdown p {
+  margin: 0 0 8px;
+}
+
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3,
+.agent-markdown h4,
+.agent-markdown h5,
+.agent-markdown h6 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.agent-markdown h1 {
+  font-size: 15px;
+}
+
+.agent-markdown h2 {
+  font-size: 14px;
+}
+
+.agent-markdown h3 {
+  font-size: 13px;
+}
+
+.agent-markdown h4,
+.agent-markdown h5,
+.agent-markdown h6 {
+  font-size: 12.5px;
+}
+
+.agent-markdown ul,
+.agent-markdown ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.agent-markdown li {
+  margin: 2px 0;
+}
+
+/* Loose lists wrap their items in paragraphs; the gap moves into the item. */
+.agent-markdown li > p {
+  margin: 0 0 4px;
+}
+
+.agent-markdown li::marker {
+  color: var(--text-faint);
+}
+
+.agent-markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.agent-markdown pre {
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.agent-markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.agent-markdown blockquote {
+  margin: 0 0 8px;
+  padding-left: 9px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.agent-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agent-markdown hr {
+  height: 1px;
+  margin: 10px 0;
+  border: 0;
+  background: var(--border);
+}
+
+/*
+ * Tables scroll inside their own frame: the sheet must never scroll sideways.
+ *
+ * The frame is the message width, the table inside it is as wide as its cells
+ * want to be - a seven-column k8s listing in a 400px sheet would otherwise break
+ * "Ready" and "35 %" across two lines - and stops at a width a person can still
+ * read across, so one very wide table cannot turn the frame into a long scroll.
+ */
+.agent-md-table {
+  margin: 0 0 8px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.agent-markdown table {
+  width: max-content;
+  max-width: 620px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.agent-markdown th,
+.agent-markdown td {
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.agent-markdown th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.agent-markdown img {
+  max-width: 100%;
+}
+
+.agent-caret {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: -1px;
+  background: var(--accent);
+  animation: agent-caret-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes agent-caret-blink {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.agent-thought {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+}
+
+.agent-thought > summary {
+  padding: 6px 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.agent-thought-text {
+  padding: 0 8px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- tool call */
+
+.agent-call {
+  /*
+   * One hairline, no status stripe. A coloured left edge turned a transcript of
+   * ten calls into ten bars of green, amber and red: the colour was louder than
+   * the content and said nothing the corner glyph does not say better.
+   */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+}
+
+.agent-call-head {
+  /*
+   * One line of text, not a row of columns. The tag opens the line and the
+   * title flows after it, so a title that wraps carries on at the card's left
+   * edge - directly under the tag - instead of being held in a column beside a
+   * vertically centred tag. The status floats to the corner, which narrows the
+   * first line only and leaves the rest of the title at full card width.
+   */
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.agent-call-head .agent-risk,
+.agent-call-head .agent-call-tool {
+  /* Inline: the title continues the same measured run of text. */
+  display: inline;
+  margin-right: 6px;
+}
+
+/*
+ * The other kind of tag, for a tool the agent called inside itself. Nothing was
+ * judged and nothing ran through this app's terminals, so the label names what
+ * the row is instead of borrowing the verdict's words. Same small face as the
+ * risk tag, no caps: this is a name, not a classification.
+ */
+.agent-call-tool {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+}
+
+.agent-call-title {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.agent-call-status {
+  float: right;
+  /* Keeps the title off the glyph on the first line. */
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* A fixed box: the label lives in the tip, so no word length moves the title. */
+  width: 16px;
+  height: 16px;
+  /* One colour per state, each one legible at 15px against the card: green for a
+     call that ran, blue for one still running, red for one that did not. */
+  color: var(--text-muted);
+}
+
+/*
+ * These marks are drawn at 15px, under the 16px grid the set was traced on, and
+ * at a 1.5 stroke the check and the alert lost enough weight to read as grey.
+ * Heavier only here: every other place the set is used draws it at its own size.
+ */
+.agent-call-status svg {
+  stroke-width: 2;
+}
+
+.agent-call-status[data-status='completed'] {
+  color: var(--success);
+}
+
+.agent-call-status[data-status='in_progress'] {
+  color: var(--accent);
+}
+
+.agent-call-status[data-status='failed'],
+.agent-call-status[data-status='blocked'] {
+  color: var(--danger);
+}
+
+/*
+ * A running call is the one thing in the panel still moving. Slow enough to read
+ * as an indicator rather than an alarm, and gone when the reader asked for less
+ * motion: the accent colour still says a call is live.
+ */
+.agent-call-spin {
+  transform-origin: center;
+  animation: agent-call-spin 1.1s linear infinite;
+}
+
+@keyframes agent-call-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-call-spin {
+    animation: none;
+  }
+}
+
+.agent-cmd {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-call-more > summary {
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/*
+ * The fold holds fields, not a loose run of labels and blocks. A label belongs
+ * to the block under it, and one field stands a step away from the next; with
+ * nothing tying a label to its block, "input" read as part of the reason line
+ * above it and "output" as part of the arguments.
+ */
+.agent-call-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.agent-call-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agent-call-key {
+  /* Same rule as the approval rows: a label keeps its own width. A shrinking
+     flex item wrapped "Reason" onto two lines when the reason was long. */
+  flex: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-call-reason {
+  display: flex;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.agent-call-exit {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.agent-call-output {
+  max-height: 200px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------- risk */
+
+.agent-risk {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-risk[data-risk='write'] {
+  color: var(--warning);
+}
+
+.agent-risk[data-risk='destructive'] {
+  color: var(--danger);
+}
+
+.agent-risk[data-risk='unknown'] {
+  color: var(--text-faint);
+}
+
+/* --------------------------------------------------------- the way back */
+
+/*
+ * A transcript is read from its end, so the one thing this panel needs is a
+ * way back to it. It sits over the last lines - inset from the corner the
+ * composer's own button is on - and exists only while the view is detached
+ * from the end.
+ */
+.agent-jump {
+  /* It is a row of the stack above the composer, not a floating corner. */
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px) scale(0.96);
+  transition:
+    opacity var(--dur-out) var(--ease-out),
+    transform var(--dur-out) var(--ease-out),
+    visibility 0s linear var(--dur-out);
+}
+
+/* Leaving is quick, arriving is a nod: it appears on the same frame the
+   scroll position stops being followed. */
+.agent-jump[data-visible='true'] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+.agent-jump:active {
+  transform: scale(0.96);
+  transition-duration: var(--dur-press);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .agent-jump[data-visible='true']:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-jump,
+  .agent-jump[data-visible='true'],
+  .agent-jump:active {
+    transform: none;
+  }
+}
+
+/* -------------------------------------------------------------- approval */
+
+/*
+ * A pending command is a decision, not a row.
+ *
+ * It floats directly above the composer it belongs to - where the user is
+ * already looking - instead of taking height from the transcript and landing
+ * somewhere in the middle of it. The layer is anchored to the composer's own
+ * box, so it follows whatever height the composer happens to have.
+ */
+.agent-foot {
+  position: relative;
+  flex: none;
+}
+
+/*
+ * Everything that talks about the end of the conversation stacks here, above
+ * the composer: the way back down, then the decision that outranks it.
+ *
+ * Stacked rather than layered, because two floating things sharing one corner
+ * means one of them is half hidden - and a button peeking out from under a
+ * panel reads as a rendering fault, not as a priority.
+ */
+.agent-above {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  right: 12px;
+  /* The composer's top padding is the gap; two more pixels keep the stack off
+     its edge without reading as a second surface. */
+  bottom: calc(100% + 2px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  /* The stack is transparent: only what it holds takes clicks, so the
+     transcript underneath stays selectable. */
+  pointer-events: none;
+}
+
+.agent-above > * {
+  pointer-events: auto;
+}
+
+.agent-approvals {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 56vh;
+  overflow-y: auto;
+  /* It grows up out of the composer. Nothing in the real world appears from
+     nothing, so it starts at 0.97 rather than 0. */
+  --enter-shift: 6px;
+  --enter-scale: 0.97;
+  transform-origin: bottom center;
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+}
+
+@starting-style {
+  .agent-approvals {
+    opacity: 0;
+    transform: translateY(var(--enter-shift)) scale(var(--enter-scale));
+  }
+}
+
+/* Reduced motion keeps the fade and drops the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-approvals {
+    --enter-shift: 0px;
+    --enter-scale: 1;
+  }
+}
+
+.agent-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  /*
+   * One hairline, the same as a row in the transcript. The coloured left edge
+   * this card used to carry said "write" or "destructive" twice - the tag beside
+   * the title already says it, in colour - and it made the card look like a
+   * different component from the rows around it. The raised shadow is what keeps
+   * it reading as a panel that is waiting for an answer.
+   */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+  box-shadow: var(--shadow-raised);
+}
+
+.agent-approval-head {
+  /*
+   * The same rule as a tool row's head: the tag opens the line and the title
+   * flows after it, so a title long enough to wrap carries on at the card's left
+   * edge instead of being held in a column beside a vertically centred tag.
+   */
+  display: block;
+  font-size: 12.5px;
+  line-height: 17px;
+}
+
+.agent-approval-head .agent-risk {
+  /* Inline: the title continues the same measured run of text. */
+  display: inline;
+  margin-right: 6px;
+}
+
+.agent-approval-title {
+  /* Inline for the same reason, and it can be as long as the command it names. */
+  display: inline;
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.agent-approval-cmd {
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-approval-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+/*
+ * The label column is sized by the label, never by a pixel budget: "Permission
+ * mode" broke in two mid-word as soon as the panel narrowed, and the Chinese
+ * label is wider still. A label is a name, not prose - it never wraps, and the
+ * value takes whatever is left.
+ */
+.agent-approval-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.agent-approval-row dt {
+  color: var(--text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-approval-row dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.agent-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.agent-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/*
+ * Deny is the reachable answer while the risk is low: it carries the accent of
+ * danger and allow stays a plain outline. From `write` on, the two swap, so the
+ * button that actually runs something is never the quieter one.
+ */
+.agent-approval-actions .agent-deny {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.agent-approval[data-risk='write'] .agent-deny,
+.agent-approval[data-risk='destructive'] .agent-deny {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.agent-approval[data-risk='write'] .agent-allow,
+.agent-approval[data-risk='destructive'] .agent-allow {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.agent-approval[data-risk='write'] .agent-allow:hover,
+.agent-approval[data-risk='destructive'] .agent-allow:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+/* ---------------------------------------------------------------- composer */
+
+.agent-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.agent-note[data-tone='danger'] {
+  color: var(--danger);
+}
+
+/*
+ * The card: everything a single turn needs, in one bordered surface.
+ *
+ * Top left names the terminal the turn is for, top right hands over files,
+ * bottom left is the permission mode, bottom right is the one round button that
+ * sends. Reading order runs the way the turn does.
+ */
+/* No rule above the card: the transcript ends, the composer begins, and the
+   card's own border is the only line the eye needs. */
+.agent-composer {
+  flex: none;
+  padding: 10px 12px 12px;
+}
+
+.agent-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  background: var(--canvas);
+  transition: border-color var(--dur-press) ease-out;
+}
+
+/* The ring belongs to the card, not to the textarea inside it. */
+.agent-compose:focus-within {
+  border-color: var(--border-strong);
+}
+
+.agent-compose-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Attach: the paperclip sits next to the terminal the files are for. */
+.agent-compose-tool {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-chip);
+  color: var(--text-faint);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.agent-compose-tool:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.agent-compose-tool:active {
+  transform: scale(0.92);
+}
+
+/* ------------------------------------------------------ composer dropdowns */
+
+.agent-pick {
+  position: relative;
+  min-width: 0;
+}
+
+.agent-pick-trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 5px 0 6px;
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.agent-pick-trigger:hover,
+.agent-pick-trigger[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.agent-pick-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-faint);
+}
+
+/* Long terminal titles end in an ellipsis: the row never grows or wraps. */
+.agent-pick-value {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The tab number, in the same accent the strip gives the front tab. */
+.agent-pick-num {
+  margin-right: 5px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-pick-caret {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 160ms var(--ease-out);
+}
+
+.agent-pick-trigger[aria-expanded='true'] .agent-pick-caret {
+  transform: rotate(180deg);
+}
+
+/* Opens upward: the card sits on the bottom edge, and that is the only side
+   with room. It grows out of the trigger's own corner. */
+.agent-pick-menu {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 258px;
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  box-shadow: var(--shadow-raised);
+  transform-origin: bottom left;
+  animation: agent-pick-in var(--dur-in) var(--ease-out);
+}
+
+@keyframes agent-pick-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.agent-pick-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 7px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background-color var(--dur-press) ease-out;
+}
+
+.agent-pick-item:hover,
+.agent-pick-item:focus-visible {
+  background: var(--hover);
+}
+
+.agent-pick-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.agent-pick-lead {
+  flex: none;
+  min-width: 15px;
+  margin-top: 1px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.agent-pick-item[data-active='true'] .agent-pick-lead {
+  color: var(--accent);
+}
+
+/* The glyph that says what kind of option this is, before the words do. */
+.agent-pick-item-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--text-faint);
+  transition: color var(--dur-press) ease-out;
+}
+
+.agent-pick-item[data-active='true'] .agent-pick-item-icon {
+  color: var(--accent);
+}
+
+.agent-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.agent-pick-title {
+  color: var(--text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.agent-pick-item[data-active='true'] .agent-pick-title {
+  color: var(--accent);
+}
+
+/* The one sentence that says what picking this would mean. */
+.agent-pick-hint {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.agent-pick-check {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------- attached files */
+
+.agent-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agent-file {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 3px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.agent-file-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.agent-file-remove {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  transition:
+    background-color var(--dur-press) ease-out,
+    color var(--dur-press) ease-out;
+}
+
+.agent-file-remove:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ the field */
+
+.agent-compose-input {
+  width: 100%;
+  min-height: 42px;
+  max-height: 132px;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.agent-compose-input::placeholder {
+  color: var(--text-faint);
+}
+
+/* The card already shows the focus: a second ring inside it is noise. */
+.agent-compose-input:focus-visible {
+  outline: none;
+}
+
+/* ------------------------------------------------------------- footer row */
+
+.agent-compose-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-pick-mode {
+  flex: none;
+  color: var(--text-faint);
+}
+
+/* The mode is a state, so it never truncates: the hint gives way instead. */
+.agent-compose-foot .agent-pick {
+  flex: none;
+}
+
+/* The keyboard hint belongs to the mode, so it sits on the mode's right and
+   gives up its own width first when the sheet is narrow. */
+.agent-compose-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+/*
+ * Send: the only filled accent on the sheet, at the end of the card's own
+ * reading order. Disabled it keeps its place and its size - an empty draft is
+ * not an error, so the button goes quiet instead of vanishing or blinking.
+ */
+.agent-send {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  transition:
+    background-color var(--dur-press) ease-out,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.agent-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.agent-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+/* Not armed yet: the same blue, washed out. It keeps its place and its size
+   instead of vanishing, because an empty draft is not an error. */
+.agent-send:disabled {
+  background: var(--accent-wash);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/*
+ * Running, the same circle stops the agent: it keeps the send button's size and
+ * place and only changes colour, so the target under the pointer never moves.
+ */
+.agent-send-stop {
+  background: var(--danger);
+  color: var(--canvas);
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-pick-caret,
+  .agent-send {
+    transition: none;
+  }
+}
+
+
+/* ------------------------------------------------- empty state: no agent yet */
+
+.agent-setup-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+}
+
+.agent-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 236px;
+  text-align: center;
+}
+
+.agent-setup-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.agent-setup-title {
+  font-size: 14.5px;
+  font-weight: 580;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.agent-setup-hint {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.agent-setup-save {
+  margin-top: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the movement, keep the fade: the card still reads as new. */
+  .agent-approval {
+    transition: opacity 180ms var(--ease-out);
+  }
+
+  @starting-style {
+    .agent-approval {
+      transform: none;
+    }
+  }
+
+  .agent-caret,
+  .agent-dot[data-status='starting'],
+  .agent-dot[data-status='running'] {
+    animation: none;
+  }
+}

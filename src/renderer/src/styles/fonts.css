@@ -1,0 +1,36 @@
+/*
+ * The app ships its own type, so the same face greets every platform.
+ *
+ * - UI: Noto Sans for Latin, Greek and Cyrillic, with Noto Sans SC behind it for
+ *   Chinese. Both are variable, so every weight the stylesheets ask for (400,
+ *   500, 550, 580, 600) is a real one instead of a synthesised bold. One design
+ *   across Windows, macOS and Linux, instead of three system faces that disagree
+ *   about x-height, punctuation and numerals.
+ * - Terminal: Sarasa Mono SC. It is a Latin monospace (Iosevka) merged with
+ *   Source Han Sans, so a full-width glyph is exactly two cells wide - the whole
+ *   reason a CJK line of shell output stays in columns.
+ *
+ * Both are SIL OFL 1.1; the licence texts sit next to the files in
+ * assets/fonts. Noto comes from @fontsource (chunked by unicode-range, so only
+ * the slices the UI actually renders are read), Sarasa is self-hosted woff2.
+ */
+
+@import '@fontsource-variable/noto-sans/wght.css';
+@import '@fontsource-variable/noto-sans-sc/wght.css';
+
+/* Two weights, because a terminal uses regular and bold and nothing between. */
+@font-face {
+  font-family: 'Sarasa Mono SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/SarasaMonoSC-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Sarasa Mono SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/SarasaMonoSC-Bold.woff2') format('woff2');
+}
