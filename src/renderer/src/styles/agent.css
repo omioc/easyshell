@@ -42,15 +42,6 @@
 }
 
 /*
- * The conversation sits under a hairline. The gap belongs to the scroll
- * viewport itself, not to the first row: padding inside the scroller would
- * scroll away with the content, and text would ride up under the rule.
- */
-.agent-conv .agent-scroll {
-  margin-top: 12px;
-}
-
-/*
  * The transcript and its way back to the end share one box.
  *
  * The button has to cover the last lines rather than sit beside them, so the
