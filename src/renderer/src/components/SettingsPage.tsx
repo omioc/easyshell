@@ -3,7 +3,6 @@ import type { ComponentType } from 'react';
 import type { AgentCliDetection } from '@shared/agents';
 import { agentCliById, isDetectedAgentSelected } from '@shared/agents';
 import type {
-  ApiEndpointInfo,
   ApplyIdentityResult,
   DeepPartial,
   IdentityMetadata,
@@ -16,7 +15,6 @@ import { COLOR_SCHEMES, resolveScheme } from '@shared/themes';
 import { LOCALE_LABELS } from '@shared/i18n';
 import { getBridge } from '../bridge';
 import { useT } from '../i18n';
-import { generateToken } from '../lib/settings';
 import { IDENTITY_FIELDS, IDENTITY_PRESETS, matchPreset, presetValues } from '../lib/identityPresets';
 import type { IdentityPresetId } from '../lib/identityPresets';
 import { formatDateTime } from '../lib/format';
@@ -33,10 +31,6 @@ import {
   IconAgent,
   IconCheck,
   IconClose,
-  IconCode,
-  IconCopy,
-  IconEye,
-  IconEyeOff,
   IconFolder,
   IconInfo,
   IconPalette,
@@ -48,7 +42,7 @@ import {
 } from './Icons';
 import type { IconProps } from './Icons';
 
-type SettingsSection = 'appearance' | 'shell' | 'connection' | 'agent' | 'api' | 'identity' | 'about';
+type SettingsSection = 'appearance' | 'shell' | 'connection' | 'agent' | 'identity' | 'about';
 
 /**
  * The page list, with the same ingredients as a sidebar row: one 16px glyph, one
@@ -64,7 +58,6 @@ const SECTIONS: Array<{
   { id: 'shell', labelKey: 'settings.tab.shell', icon: IconTerminal },
   { id: 'connection', labelKey: 'settings.tab.connection', icon: IconServer },
   { id: 'agent', labelKey: 'settings.tab.agent', icon: IconAgent },
-  { id: 'api', labelKey: 'settings.tab.api', icon: IconCode },
   { id: 'identity', labelKey: 'settings.tab.identity', icon: IconUser },
   { id: 'about', labelKey: 'settings.tab.about', icon: IconInfo },
 ];
@@ -82,14 +75,12 @@ export interface SettingsPageProps {
   /** Whether the OS itself is dark, so the picker knows which schemes can apply. */
   systemDark: boolean;
   platform: PlatformInfo;
-  api: ApiEndpointInfo;
   wslDistributions: string[];
   onClose: () => void;
   patch: (patch: DeepPartial<Settings>) => void;
   onApplyIdentity: () => Promise<ApplyIdentityResult>;
   onRevealIdentity: () => void;
   onRefreshSettings: () => Promise<void>;
-  onCopy: (text: string) => void;
 }
 
 /**
@@ -227,18 +218,15 @@ export function SettingsPage({
   settings,
   systemDark,
   platform,
-  api,
   wslDistributions,
   onClose,
   patch,
   onApplyIdentity,
   onRevealIdentity,
   onRefreshSettings,
-  onCopy,
 }: SettingsPageProps) {
   const t = useT();
   const [section, setSection] = useState<SettingsSection>('appearance');
-  const [tokenVisible, setTokenVisible] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(
     null,
@@ -254,9 +242,6 @@ export function SettingsPage({
   };
   const patchShell = (next: Partial<Settings['shell']>) => {
     patch({ shell: { ...settings.shell, ...next } });
-  };
-  const patchApi = (next: Partial<Settings['api']>) => {
-    patch({ api: { ...settings.api, ...next } });
   };
   const patchProbe = (next: Partial<Settings['probe']>) => {
     patch({ probe: { ...settings.probe, ...next } });
@@ -714,82 +699,6 @@ export function SettingsPage({
 
               <p className="settings-note">{t('settings.agent.hint')}</p>
               <p className="settings-note">{t('settings.agent.modeHint')}</p>
-            </section>
-          ) : null}
-
-          {section === 'api' ? (
-            <section className="settings-section">
-              <Field label={t('settings.api.enabled')} inline>
-                <Switch
-                  checked={settings.api.enabled}
-                  label={t('settings.api.enabled')}
-                  onChange={(checked) => patchApi({ enabled: checked })}
-                />
-              </Field>
-              <Field label={t('settings.api.port')} htmlFor="set-api-port" inline>
-                <NumberInput
-                  id="set-api-port"
-                  value={settings.api.port}
-                  min={1024}
-                  max={65535}
-                  onCommit={(value) => patchApi({ port: value })}
-                />
-              </Field>
-              <Field label={t('settings.api.baseUrl')} htmlFor="set-api-url" inline>
-                <div className="input-with-action">
-                  <input id="set-api-url" className="input" data-mono="true" readOnly value={api.baseUrl} />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t('common.copy')}
-                    data-tip={t('common.copy')}
-                    onClick={() => onCopy(api.baseUrl)}
-                  >
-                    <IconCopy size={13} />
-                  </button>
-                </div>
-              </Field>
-              <Field label={t('settings.api.token')} htmlFor="set-api-token">
-                <div className="input-with-action">
-                  <DebouncedInput
-                    id="set-api-token"
-                    type={tokenVisible ? 'text' : 'password'}
-                    value={settings.api.token}
-                    mono
-                    onCommit={(value) => patchApi({ token: value })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={tokenVisible ? t('settings.api.hideToken') : t('settings.api.showToken')}
-                    data-tip={tokenVisible ? t('settings.api.hideToken') : t('settings.api.showToken')}
-                    aria-pressed={tokenVisible}
-                    onClick={() => setTokenVisible((value) => !value)}
-                  >
-                    {tokenVisible ? <IconEyeOff size={14} /> : <IconEye size={14} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t('settings.api.copyToken')}
-                    data-tip={t('settings.api.copyToken')}
-                    onClick={() => onCopy(settings.api.token)}
-                  >
-                    <IconCopy size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={t('settings.api.regenerate')}
-                    data-tip={t('settings.api.regenerate')}
-                    onClick={() => patchApi({ token: generateToken() })}
-                  >
-                    <IconRefresh size={14} />
-                  </button>
-                </div>
-              </Field>
-              <p className="settings-note">{t('settings.api.hint')}</p>
-              <p className="settings-note">{t('settings.api.restartHint')}</p>
             </section>
           ) : null}
 

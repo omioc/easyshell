@@ -1149,14 +1149,12 @@ export function App() {
                 settings={settings}
                 systemDark={systemDark}
                 platform={boot.platform}
-                api={boot.api}
                 wslDistributions={boot.wslDistributions}
                 onClose={() => setSettingsOpen(false)}
                 patch={(patch) => void patchSettings(patch)}
                 onApplyIdentity={() => getBridge().applyIdentity()}
                 onRevealIdentity={() => void getBridge().revealIdentity()}
                 onRefreshSettings={refreshSettings}
-                onCopy={(text) => void copy(text)}
               />
             ) : null}
             {/* One saved host at a time: a page, exactly like settings. */}
