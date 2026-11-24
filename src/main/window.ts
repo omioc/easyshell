@@ -21,6 +21,28 @@ export function resolveAppIcon(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+/*
+ * The narrowest shell the layout still works in.
+ *
+ * The renderer owns these numbers - `--shell-gap`, `--sidebar-width`,
+ * `--work-column-min-width` and `--sheet-width` in `tokens.css` - and the main
+ * process owns the window, so the two cannot read each other's copy. They are
+ * mirrored here on purpose: the window stops shrinking at exactly the width
+ * where the working column reaches its own floor, with the sheet docked beside
+ * it.
+ */
+const SHELL_GAP = 10;
+const SIDEBAR_WIDTH = 268;
+const WORK_COLUMN_MIN_WIDTH = 560;
+const SHEET_WIDTH = 400;
+const MIN_WINDOW_WIDTH =
+  SHELL_GAP * 2 + // the pad the shell keeps around everything
+  SIDEBAR_WIDTH +
+  SHELL_GAP + // the gutter between the sidebar and the stage
+  WORK_COLUMN_MIN_WIDTH +
+  SHELL_GAP + // the gutter between the working column and the sheet
+  SHEET_WIDTH;
+
 /**
  * macOS only: where the traffic lights sit inside the band the renderer keeps
  * free at the top of the window. Top-left origin, measured from the window's
@@ -34,12 +56,15 @@ export function createWindow(settings: Settings, isDev: boolean): BrowserWindow 
   // A default or persisted size can be wider than the screen it wakes up on; a
   // window larger than the work area opens partly off-screen with no way back.
   const workArea = screen.getPrimaryDisplay().workAreaSize;
+  // The floor never wins over the screen: a display too small for the whole
+  // shell still gets a window that fits it, and the resize stops there.
+  const minWidth = Math.min(MIN_WINDOW_WIDTH, workArea.width);
   const window = new BrowserWindow({
-    width: Math.max(640, Math.min(settings.window.width, workArea.width)),
+    width: Math.max(minWidth, Math.min(settings.window.width, workArea.width)),
     height: Math.max(400, Math.min(settings.window.height, workArea.height)),
     x: settings.window.x,
     y: settings.window.y,
-    minWidth: 640,
+    minWidth,
     minHeight: 400,
     show: false,
     backgroundColor: dark ? '#0f1116' : '#eef2fa',

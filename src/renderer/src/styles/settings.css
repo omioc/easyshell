@@ -431,7 +431,10 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-width: 0;
+  /* The same floor the terminal keeps: a settings row that cannot hold its
+     field is the same broken column in a lighter frame. The connection editor
+     wears this frame too, so both pages inherit it. */
+  min-width: var(--work-column-min-width);
   min-height: 0;
   background: var(--surface);
   border: 1px solid var(--border);

@@ -100,7 +100,9 @@ export function createDefaultSettings(os: PlatformOs): Settings {
     },
     layout: { sidebarCollapsed: false, sessionOrder: [] },
     // A wide default: the composer, the transcript and the terminal all read
-    // better with room, and a fresh install should start at its best shape.
-    window: { width: 1440, height: 900 },
+    // better with room, and a fresh install should start at its best shape -
+    // wide enough for the docked sheet beside a terminal that still holds a
+    // full line of output.
+    window: { width: 1580, height: 900 },
   };
 }

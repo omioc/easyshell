@@ -15,7 +15,13 @@
 .terminal-stage {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  /*
+   * The working column keeps a usable width: below it the terminal stops
+   * holding a line of output, and a smaller card only hides that this is the
+   * same app. The window is held at the width this floor adds up to, so the
+   * resize stops before the column does.
+   */
+  min-width: var(--work-column-min-width);
   min-height: 0;
   background: var(--terminal-bg);
   border-radius: var(--radius-card);

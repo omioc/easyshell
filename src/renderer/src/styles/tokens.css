@@ -50,6 +50,17 @@
   --sheet-width: 400px;
 
   /*
+   * The floor of the working column: the terminal, the settings page and the
+   * connection editor all live there, and below this they stop being usable - a
+   * terminal loses its columns, a settings row loses its field.
+   *
+   * Reaching it is where the window stops shrinking, not where a scrollbar
+   * appears: `window.ts` holds the window at the width this column, the
+   * sidebar, the sheet and the gutters add up to. Change one, change the other.
+   */
+  --work-column-min-width: 560px;
+
+  /*
    * How far a divider stops short of the surface's edges. One number for every
    * hairline in the app, so panels, docks and dialogs read as one family.
    */
