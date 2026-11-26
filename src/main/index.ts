@@ -300,6 +300,11 @@ function registerIpc(): void {
   ipcMain.handle('session:write', (_event, id: string, data: string) => {
     manager.write(id, data);
   });
+  // The credential popover's answer: use the saved password, or keep the one
+  // just typed. Neither happens without this call.
+  ipcMain.handle('session:credential', (_event, id: string, decision: 'accept' | 'dismiss') => {
+    manager.respondCredential(id, decision);
+  });
   ipcMain.handle('session:resize', (_event, id: string, cols: number, rows: number) => {
     manager.resize(id, cols, rows);
   });
@@ -597,6 +602,15 @@ async function startApp(): Promise<void> {
     homeDir: homedir(),
     knownHosts,
     emit: broadcast,
+    // A password the user agreed to keep: the settings store seals it on disk
+    // exactly like a saved host's own password. The broadcast is what keeps the
+    // settings page honest — the vault is written from the terminal, so no IPC
+    // call answers with the new list and the open page would keep showing the
+    // one it read when it mounted.
+    replaceCredentials: (credentials) => {
+      const next = settingsStore.update({ vault: { credentials } });
+      broadcast({ type: 'settings-updated', settings: next });
+    },
   });
 
   agentBridge = new AgentBridge({

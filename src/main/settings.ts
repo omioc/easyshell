@@ -6,6 +6,7 @@ import { API_DEFAULT_PORT, SETTINGS_VERSION, createDefaultSettings } from '@shar
 import { isAgentPermissionMode } from '@shared/agent';
 import type { DeepPartial, PlatformOs, Settings } from '@shared/types';
 import { normalizeSshProfiles } from '../shared/profiles';
+import { normalizeCredentials } from '../shared/credentials';
 import { normalizeWorkspaces, pruneWorkspaces } from '../shared/workspaces';
 import { paths } from './paths';
 import { type SecretCipher, createSecretCipher, isSealed } from './secrets';
@@ -54,6 +55,9 @@ export function normalizeSettings(input: DeepPartial<Settings>, platform: Platfo
   }
   merged.ssh.profiles = normalizeSshProfiles(merged.ssh.profiles);
   merged.workspaces = pruneWorkspaces(normalizeWorkspaces(merged.workspaces), merged.ssh.profiles);
+  // Remembered logins are repaired like hosts are: an entry without a password,
+  // a username or a host cannot answer anything and is dropped.
+  merged.vault = { credentials: normalizeCredentials(merged.vault?.credentials) };
   if (!merged.api.token) merged.api.token = generateToken();
   merged.api.port = clampNumber(merged.api.port, 1, 65535, API_DEFAULT_PORT);
   merged.probe.intervalMs = clampNumber(merged.probe.intervalMs, 5000, 600000, defaults.probe.intervalMs);
@@ -141,31 +145,54 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 
 /* ------------------------------------------------------------ secrets at rest */
 
-/** The host fields that hold a secret. A note, a port, a hostname are all safe. */
-const SECRET_FIELDS = ['password', 'passphrase'] as const;
+/** The host fields that hold a secret. A name, a port, a hostname are all safe. */
+const PROFILE_SECRET_FIELDS = ['password', 'passphrase'] as const;
 
-/** Rewrites both secret fields on every saved host and keeps everything else. */
+/** A remembered login has exactly one secret. */
+const CREDENTIAL_SECRET_FIELDS = ['password'] as const;
+
+/** Rewrites the named string fields of one object, keeping everything else. */
+function rewriteSecretFields<T>(item: T, fields: readonly string[], rewrite: (value: string) => string): T {
+  if (!isPlainObject(item)) return item;
+  const next: Record<string, unknown> = { ...item };
+  for (const field of fields) {
+    const value = next[field];
+    if (typeof value === 'string' && value.length > 0) next[field] = rewrite(value);
+  }
+  return next as T;
+}
+
+/** Rewrites every secret the settings file carries: hosts and the vault. */
 function mapSecretFields(
   input: DeepPartial<Settings>,
   rewrite: (value: string) => string,
 ): DeepPartial<Settings> {
+  let next = input;
   const profiles = input.ssh?.profiles;
-  if (!Array.isArray(profiles)) return input;
-  return {
-    ...input,
-    ssh: {
-      ...input.ssh,
-      profiles: profiles.map((profile) => {
-        if (!isPlainObject(profile)) return profile;
-        const next: Record<string, unknown> = { ...profile };
-        for (const field of SECRET_FIELDS) {
-          const value = next[field];
-          if (typeof value === 'string' && value.length > 0) next[field] = rewrite(value);
-        }
-        return next;
-      }),
-    },
-  } as DeepPartial<Settings>;
+  if (Array.isArray(profiles)) {
+    next = {
+      ...next,
+      ssh: {
+        ...next.ssh,
+        profiles: profiles.map((profile) =>
+          rewriteSecretFields(profile, PROFILE_SECRET_FIELDS, rewrite),
+        ),
+      },
+    } as DeepPartial<Settings>;
+  }
+  const credentials = input.vault?.credentials;
+  if (Array.isArray(credentials)) {
+    next = {
+      ...next,
+      vault: {
+        ...next.vault,
+        credentials: credentials.map((entry) =>
+          rewriteSecretFields(entry, CREDENTIAL_SECRET_FIELDS, rewrite),
+        ),
+      },
+    } as DeepPartial<Settings>;
+  }
+  return next;
 }
 
 /** The form a host's password and passphrase take inside `settings.json`. */

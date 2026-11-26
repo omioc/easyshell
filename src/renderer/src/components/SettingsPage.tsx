@@ -13,6 +13,7 @@ import type {
 } from '@shared/types';
 import { COLOR_SCHEMES, resolveScheme } from '@shared/themes';
 import { LOCALE_LABELS } from '@shared/i18n';
+import { credentialLabel, removeCredential } from '@shared/credentials';
 import { getBridge } from '../bridge';
 import { useT } from '../i18n';
 import { IDENTITY_FIELDS, IDENTITY_PRESETS, matchPreset, presetValues } from '../lib/identityPresets';
@@ -38,6 +39,7 @@ import {
   IconRefresh,
   IconServer,
   IconTerminal,
+  IconTrash,
   IconUser,
 } from './Icons';
 import type { IconProps } from './Icons';
@@ -286,6 +288,11 @@ export function SettingsPage({
     const defaultProfileId =
       settings.shell.defaultProfileId === id ? updated[0]?.id ?? '' : settings.shell.defaultProfileId;
     patchShell({ profiles: updated, defaultProfileId });
+  };
+
+  /** A remembered password the user no longer wants kept. */
+  const forgetCredential = (id: string) => {
+    patch({ vault: { credentials: removeCredential(settings.vault.credentials, id) } });
   };
 
   const applyPreset = (id: IdentityPresetId) => {
@@ -647,6 +654,40 @@ export function SettingsPage({
                   />
                 </Field>
                 <p className="settings-note">{t('settings.probe.hint')}</p>
+              </div>
+
+              {/*
+               * The vault is written from the terminal, so this page only shows
+               * what a login left behind and lets it go: a remembered password
+               * nobody can find is a password nobody can stop trusting.
+               *
+               * One login is one tag - as wide as what it says, never the width
+               * of the column - and the bin lives inside the tag it belongs to.
+               */}
+              <div className="settings-block" data-testid="saved-credentials">
+                <p className="settings-block-title">{t('settings.connection.credentials')}</p>
+                {settings.vault.credentials.length === 0 ? (
+                  <p className="settings-note">{t('settings.connection.credentialsEmpty')}</p>
+                ) : (
+                  <ul className="credential-list">
+                    {settings.vault.credentials.map((entry) => (
+                      <li className="credential-chip" key={entry.id}>
+                        <span className="credential-chip-label">{credentialLabel(entry)}</span>
+                        <button
+                          type="button"
+                          className="credential-chip-remove"
+                          aria-label={`${t('settings.connection.credentialRemove')} ${credentialLabel(entry)}`}
+                          data-tip={t('settings.connection.credentialRemove')}
+                          data-testid={`credential-remove-${entry.id}`}
+                          onClick={() => forgetCredential(entry.id)}
+                        >
+                          <IconTrash size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="settings-note">{t('settings.connection.credentialsHint')}</p>
               </div>
             </section>
           ) : null}

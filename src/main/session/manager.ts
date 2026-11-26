@@ -11,6 +11,7 @@ import type {
   SessionSpec,
   Settings,
 } from '../../shared/types';
+import type { PortForwardFailure } from '../../shared/port-forwards';
 import { NestedDetector } from '../metadata/nested';
 import { BANNER_HINT, LOGIN_SIGNATURE, distroName, parseLoginBanner } from '../metadata/banner';
 import {
@@ -46,6 +47,8 @@ import { planSession, startLocalSession } from './local';
 import { startSshSession } from './ssh';
 import type { KnownHostsStore } from './known-hosts';
 import { withWorkingDirectory } from './types';
+import { CredentialDesk } from './credentials';
+import type { SshCredential } from '../../shared/types';
 import type { ExecOptions, SessionBackend } from './types';
 
 const BUFFER_LIMIT = 256 * 1024;
@@ -88,6 +91,17 @@ const SHELL_PROBE_MAX_TOTAL = 12;
  * would type into a line that is still being printed.
  */
 const CWD_QUIET_MS = 600;
+/**
+ * Login commands: when the first line may be typed, how long each one gets to
+ * finish printing, and how long the queue waits before giving up on quiet.
+ *
+ * The seconds here are the user's own commands, not an app probe: a `docker ps`
+ * that takes three seconds must not have the next line typed into its output.
+ */
+const LOGIN_COMMAND_FIRST_DELAY_MS = 250;
+const LOGIN_COMMAND_STEP_MS = 200;
+const LOGIN_COMMAND_QUIET_MS = 350;
+const LOGIN_COMMAND_QUIET_MAX_MS = 15_000;
 
 /**
  * OSC 7 (`file://host/path`) and OSC 9;9 (`C:\path`) are the two ways a shell
@@ -215,6 +229,12 @@ interface Runtime {
    */
   candidate: SessionHop | null;
   /**
+   * What the line the user last submitted says the machine may ask a password
+   * for: `sudo` authenticates the account already here, `su` the one it switches
+   * to. `null` when that line asks for no password at all.
+   */
+  escalation: { via: 'sudo' | 'su'; account?: string } | null;
+  /**
    * The one shell probe a hop is allowed, and how far it got. `Depth` is the
    * chain length that was answered, so a new hop always deserves a new probe.
    */
@@ -243,6 +263,10 @@ interface Runtime {
   apiClients: Set<string>;
   connecting: boolean;
   initialCommandPending: string | null;
+  /** Login commands still to be typed, in order; emptied as they are sent. */
+  loginCommandsPending: string[];
+  /** The password prompt in this tab, and what the user said about it. */
+  credential: CredentialDesk;
   closed: boolean;
   /** Where the interactive shell is, once anything revealed it. */
   cwd: string | null;
@@ -262,6 +286,11 @@ export interface SessionManagerOptions {
   homeDir: string;
   knownHosts: KnownHostsStore;
   emit: (event: SessionEvent) => void;
+  /**
+   * Writes the whole vault back. The manager owns the decision to remember a
+   * password; where it is kept, and how it is sealed, is the store's business.
+   */
+  replaceCredentials?: (next: SshCredential[]) => void;
 }
 
 function nowMs(): number {
@@ -322,7 +351,42 @@ export class SessionManager {
       bufferBytes: 0,
     };
 
-    const runtime: Runtime = {
+    // The desk reads the session lazily — it only looks at the chain and the
+    // screen when a prompt is on it, never before the session exists.
+    let runtime: Runtime;
+    const credential = new CredentialDesk({
+      candidate: () => runtime.candidate,
+      landed: () => runtime.info.metadata.endpoint.chain.at(-1) ?? null,
+      depth: () => runtime.info.metadata.endpoint.chain.length,
+      // The password a `sudo` / `su` asks for belongs to an account rather than
+      // to a login that will show up next: `sudo` wants the one running it, `su`
+      // the one it switches to. The hop on top knows the account and both names
+      // of the machine it stands on.
+      login: () => {
+        const chain = runtime.info.metadata.endpoint.chain;
+        const top = chain[chain.length - 1];
+        if (!top?.username) return null;
+        return { username: top.username, host: top.host, hostname: top.hostname, port: top.port };
+      },
+      escalation: () => runtime.escalation,
+      tail: () => runtime.tailText,
+      // `vault` is always set by the settings store; a caller that hands the
+      // manager a partial settings object still gets an empty vault.
+      credentials: () => this.options.getSettings().vault?.credentials ?? [],
+      replaceCredentials: (next) => this.options.replaceCredentials?.(next),
+      typeSecret: (password) => {
+        runtime.info.lastActivityAt = nowMs();
+        runtime.backend?.write(`${password}\r`);
+      },
+      ask: (request) =>
+        this.options.emit({ type: 'session-credential', id: runtime.info.id, request }),
+      saved: (label) =>
+        this.options.emit({
+          type: 'notice',
+          notice: { level: 'info', key: 'notice.credentialSaved', params: { label } },
+        }),
+    });
+    runtime = {
       info,
       backend: null,
       buffer: '',
@@ -337,6 +401,8 @@ export class SessionManager {
       shellProbeDepth: 0,
       shellProbeAttempts: 0,
       candidate: null,
+      escalation: null,
+      credential,
       pendingInput: '',
       inputVersion: 0,
       awaitingLineBreak: false,
@@ -353,6 +419,9 @@ export class SessionManager {
       apiClients: new Set<string>(),
       connecting: true,
       initialCommandPending: spec.initialCommand ?? null,
+      // The spec only carries them for SSH, where "after login" is a moment the
+      // user cannot be sitting at the keyboard for.
+      loginCommandsPending: spec.kind === 'ssh' ? [...(spec.loginCommands ?? [])] : [],
       closed: false,
       cwd: null,
       cwdReportedVersion: -1,
@@ -372,6 +441,7 @@ export class SessionManager {
         if (status === 'connected') {
           runtime.everConnected = true;
           this.flushInitialCommand(runtime);
+          this.flushLoginCommands(runtime);
           // ConPTY can swallow the first prompt when the renderer fits the pane
           // right after spawn. A resize wiggle forces a repaint (SIGWINCH).
           this.nudgeRepaint(runtime, 600);
@@ -380,6 +450,23 @@ export class SessionManager {
         this.emitUpdate(runtime);
       },
       onError: (message: string) => this.handleError(runtime, message),
+      /**
+       * A tunnel is not the tab.
+       *
+       * The login succeeded and the shell is about to open, so nothing about the
+       * session's state changes here: the user gets a toast naming the tunnel
+       * that did not come up and keeps working in a tab that is genuinely
+       * connected.
+       */
+      onForwardError: (failure: PortForwardFailure) =>
+        this.options.emit({
+          type: 'notice',
+          notice: {
+            level: 'error',
+            key: failure.rule ? 'notice.portForwardFailed' : 'notice.portForwardFailedGeneric',
+            params: { rule: failure.rule, detail: failure.detail },
+          },
+        }),
     };
 
     this.runtimes.set(id, runtime);
@@ -425,6 +512,9 @@ export class SessionManager {
     if (submitted >= 0) runtime.pendingInput = data.slice(submitted + 1).slice(-256);
     else if (data.includes('\x03')) runtime.pendingInput = '';
     else runtime.pendingInput = `${runtime.pendingInput}${data}`.slice(-256);
+    // A password typed at a prompt is the same keystrokes as any other line: the
+    // desk sees them before the shell does and decides what they were.
+    runtime.credential.onInput(data);
     // Read the typed line first, whatever else is going on: a probe in flight
     // lasts a second or two, and a nested login typed in that window is still a
     // nested login. Dropping it here is what turns a whole hop into a guess.
@@ -879,6 +969,20 @@ export class SessionManager {
   }
 
   /** The session's own SFTP channel, multiplexed over its SSH connection. */
+  /**
+   * Answers the credential popover of one terminal.
+   *
+   * Two answers are possible because two questions are: `accept` types a saved
+   * password into the prompt that is waiting, or keeps the one just typed; and
+   * `dismiss` means "not now" — the password is neither used nor stored, and
+   * the tab is not asked again about that login.
+   */
+  respondCredential(id: string, decision: 'accept' | 'dismiss'): void {
+    const runtime = this.runtimes.get(id);
+    if (!runtime || runtime.closed) return;
+    runtime.credential.respond(decision);
+  }
+
   openSftp(id: string): Promise<SFTPWrapper | null> {
     const runtime = this.runtimes.get(id);
     if (!runtime || runtime.closed || !runtime.backend?.sftp) return Promise.resolve(null);
@@ -1010,6 +1114,9 @@ export class SessionManager {
     // identifies readline returning to its prompt, including with echo off.
     if (chunk.includes('\n') || chunk.includes('\x1b[?2004h')) runtime.awaitingLineBreak = false;
     this.trackPrompt(runtime);
+    // The prompt on screen may be a password prompt: noticed before anything
+    // else reads the output, so a saved answer can be offered while it waits.
+    runtime.credential.onOutput();
     this.trackCwd(runtime, chunk);
     // The banner last: a hop the prompt just confirmed is on the chain by now,
     // so the addresses the banner reports land on the hop they describe.
@@ -1273,6 +1380,9 @@ export class SessionManager {
     this.cancelCwdRefresh(runtime);
     runtime.info.status = code === 0 || code === null ? 'exited' : 'error';
     runtime.info.exitCode = code;
+    // Nothing is typed into a tab that is gone.
+    runtime.loginCommandsPending.length = 0;
+    runtime.credential.reset();
     if (runtime.timer) clearTimeout(runtime.timer);
     if (runtime.shellProbeTimer) clearTimeout(runtime.shellProbeTimer);
     if (runtime.injection) {
@@ -1323,8 +1433,17 @@ export class SessionManager {
       if (signal.type === 'push') {
         // Not a hop yet: the line was submitted, the login has not answered.
         runtime.candidate = signal.hop;
+      } else if (signal.type === 'escalation') {
+        // What the machine may want a password for next: `sudo` asks about the
+        // account already here, `su` about the one it switches to. Every
+        // submitted line replaces this, so a `sudo` the user has moved on from
+        // stops answering for whatever prompt turns up later.
+        runtime.escalation = signal.via ? { via: signal.via, account: signal.account } : null;
       } else if (signal.type === 'failed' || signal.type === 'cancelled') {
         this.dropCandidate(runtime);
+        runtime.escalation = null;
+        // The login this password was typed for did not happen after all.
+        runtime.credential.onAttemptFailed();
       } else if (signal.type === 'pop') {
         // An `exit` (or a closed connection) while a move is still in flight
         // means the move is what is being abandoned.
@@ -1354,6 +1473,7 @@ export class SessionManager {
             username: signal.username,
           });
           runtime.candidate = null;
+          runtime.credential.onLanded();
           changed = changed || update.changed;
           if (update.machineChanged) machineChanged = true;
           runtime.info.metadata.endpoint.source = 'nested';
@@ -1500,6 +1620,12 @@ export class SessionManager {
       this.dropCandidate(runtime);
       return;
     }
+    // Another shell is painting its prompt: whatever was typed at the prompt
+    // that just went away was answered by a login that got through. The chain
+    // may not follow it — a command recalled from history leaves nothing for the
+    // detector to read — but the login happened, so the password is worth
+    // offering to keep.
+    runtime.credential.onLanded({ username: identity.username, host: identity.hostname });
     this.applyPromptIdentity(runtime, identity.username, identity.hostname);
   }
 
@@ -1527,6 +1653,9 @@ export class SessionManager {
       runtime.info.metadata.extra['nested.at'] = String(nowMs());
     }
     this.recomputeEndpoint(runtime);
+    // A login that just landed is the one moment a typed password can be known
+    // to be the right one: this is where keeping it gets asked.
+    runtime.credential.onLanded();
     this.emitMetadata(runtime);
     if (update.machineChanged) this.scheduleShellProbe(runtime);
   }
@@ -1774,6 +1903,41 @@ export class SessionManager {
       // the session, and the detector has to see it.
       this.write(runtime.info.id, `${command}\r`);
     }, 400);
+  }
+
+  /**
+   * Types the saved login commands into the shell, one line at a time.
+   *
+   * A login command is the user's own instruction for a machine they just
+   * reached, so each line travels the path a typed line travels — `write()`,
+   * the nested-login detector, the display — and only the timing is the app's
+   * idea: a line waits for the previous one to stop printing, because a command
+   * that is still running has not finished with the shell yet.
+   *
+   * Two things stop the queue: the tab going away, and a shell that is asking a
+   * question (`password:`, `[y/n]`). The next line typed into one of those would
+   * answer it with a command, which is the one thing an app must never do.
+   */
+  private flushLoginCommands(runtime: Runtime, index = 0): void {
+    if (runtime.closed || index >= runtime.loginCommandsPending.length) return;
+    const startedAt = nowMs();
+    const send = () => {
+      const queue = runtime.loginCommandsPending;
+      if (runtime.closed || index >= queue.length) return;
+      if (looksLikeCredentialPrompt(runtime.tailText)) {
+        queue.length = 0;
+        return;
+      }
+      const quietFor = nowMs() - runtime.lastOutputAt;
+      if (quietFor < LOGIN_COMMAND_QUIET_MS && nowMs() - startedAt < LOGIN_COMMAND_QUIET_MAX_MS) {
+        setTimeout(send, 100);
+        return;
+      }
+      this.write(runtime.info.id, `${queue[index]}\r`);
+      setTimeout(() => this.flushLoginCommands(runtime, index + 1), LOGIN_COMMAND_STEP_MS);
+    };
+    // The shell paints its prompt before anything may be typed over it.
+    setTimeout(send, index === 0 ? LOGIN_COMMAND_FIRST_DELAY_MS : 0);
   }
 
   /**

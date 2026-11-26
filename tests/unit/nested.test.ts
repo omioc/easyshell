@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NestedDetector,
   analyseCommandLine,
+  parseEscalation,
   parseSshTarget,
   parseUserSwitch,
   stripInputNoise,
@@ -90,13 +91,51 @@ describe('parseUserSwitch', () => {
   });
 });
 
+describe('parseEscalation', () => {
+  it('reads sudo as the account that is already logged in', () => {
+    // `sudo` authenticates the account running it, whatever it goes on to do.
+    expect(parseEscalation('sudo -i')).toEqual({ via: 'sudo' });
+    expect(parseEscalation('sudo -s')).toEqual({ via: 'sudo' });
+    expect(parseEscalation('sudo su -')).toEqual({ via: 'sudo' });
+    expect(parseEscalation('sudo systemctl restart nginx')).toEqual({ via: 'sudo' });
+    expect(parseEscalation('sudo -u postgres -i')).toEqual({ via: 'sudo' });
+  });
+
+  it('reads su as the account it switches to', () => {
+    expect(parseEscalation('su')).toEqual({ via: 'su', account: 'root' });
+    expect(parseEscalation('su -')).toEqual({ via: 'su', account: 'root' });
+    expect(parseEscalation('su - postgres')).toEqual({ via: 'su', account: 'postgres' });
+    expect(parseEscalation('su --login app')).toEqual({ via: 'su', account: 'app' });
+    // What follows `-c` is a command, not the account.
+    expect(parseEscalation('su -c "ls"')).toEqual({ via: 'su', account: 'root' });
+  });
+
+  it('says nothing for a line that asks for no password', () => {
+    expect(parseEscalation('ls -la')).toBeNull();
+    expect(parseEscalation('ssh root@198.18.0.9')).toBeNull();
+    expect(parseEscalation('')).toBeNull();
+  });
+
+  it('is reported by every submitted line, and taken back by the next', () => {
+    const detector = new NestedDetector(true);
+    // `sudo -i` asks for the login's own password…
+    expect(detector.feedInput('sudo -i\r')).toContainEqual({ type: 'escalation', via: 'sudo' });
+    // …and a line that asks for nothing takes that back, so a `sudo` the user
+    // has moved on from cannot answer for whatever prompt comes next.
+    expect(detector.feedInput('ls\r')).toContainEqual({ type: 'escalation', via: null });
+  });
+});
+
 describe('NestedDetector', () => {
   it('emits one push per completed typed line', () => {
     const detector = new NestedDetector(true);
     // The line arrives in two chunks: the address is split mid-octet.
     const signals = [...detector.feedInput('ssh root@198.18.'), ...detector.feedInput('0.9\r')];
-    expect(signals).toHaveLength(1);
-    expect(signals[0]).toMatchObject({ type: 'push', hop: { host: '198.18.0.9' } });
+    // Every submitted line also says what password it may lead to; the move is
+    // the push.
+    const moves = signals.filter((signal) => signal.type === 'push');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ type: 'push', hop: { host: '198.18.0.9' } });
   });
 
   it('reads the line the shell would have run, not the keys that built it', () => {
@@ -107,14 +146,15 @@ describe('NestedDetector', () => {
       ...detector.feedInput('\x7f4'),
       ...detector.feedInput('\r'),
     ];
-    expect(signals).toHaveLength(1);
-    expect(signals[0]).toMatchObject({ type: 'push', hop: { host: '203.0.113.4' } });
+    const moves = signals.filter((signal) => signal.type === 'push');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ type: 'push', hop: { host: '203.0.113.4' } });
   });
 
   it('never moves before the line was submitted', () => {
     const detector = new NestedDetector(true);
     expect(detector.feedInput('ssh root@203.0.113.4')).toEqual([]);
-    expect(detector.feedInput('\r')).toHaveLength(1);
+    expect(detector.feedInput('\r').filter((signal) => signal.type === 'push')).toHaveLength(1);
   });
 
   it('drops the line on Ctrl-C, and stops trusting one the shell edited', () => {

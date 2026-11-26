@@ -7,6 +7,7 @@
  */
 
 import type { HostKeyPolicy, SessionSpec, SshHostFacts, SshProfile } from './types';
+import { normalizePortForwards, validatePortForwards } from './port-forwards';
 
 export const DEFAULT_SSH_PORT = 22;
 
@@ -40,6 +41,26 @@ function normalizeHostFacts(value: unknown): SshHostFacts | undefined {
   return distribution ? { linux: facts.linux, distribution, at } : { linux: facts.linux, at };
 }
 
+/**
+ * Login commands: one line per command, trimmed, blank lines dropped.
+ *
+ * A saved host keeps them as an ordered list, because that is the only thing
+ * that survives a round trip through `settings.json` without ambiguity — a
+ * command may contain spaces and quotes of its own.
+ */
+export function normalizeLoginCommands(value: unknown): string[] | undefined {
+  const list = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/\r?\n/)
+      : [];
+  const commands = list
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return commands.length > 0 ? commands : undefined;
+}
+
 export function createSshProfile(partial: Partial<SshProfile> = {}): SshProfile {
   const now = Date.now();
   return {
@@ -53,7 +74,8 @@ export function createSshProfile(partial: Partial<SshProfile> = {}): SshProfile 
     privateKeyPath: optionalText(partial.privateKeyPath),
     passphrase: optionalText(partial.passphrase),
     hostKeyPolicy: partial.hostKeyPolicy,
-    notes: optionalText(partial.notes),
+    portForwards: normalizePortForwards(partial.portForwards),
+    loginCommands: normalizeLoginCommands(partial.loginCommands),
     detected: normalizeHostFacts(partial.detected),
     createdAt: partial.createdAt ?? now,
     updatedAt: partial.updatedAt ?? now,
@@ -78,7 +100,7 @@ export function normalizeSshProfiles(input: unknown): SshProfile[] {
 }
 
 export interface SshProfileIssue {
-  field: 'name' | 'host' | 'username' | 'port' | 'privateKeyPath';
+  field: 'name' | 'host' | 'username' | 'port' | 'privateKeyPath' | 'portForwards';
   /** i18n key, resolved by the UI. */
   key: string;
 }
@@ -93,6 +115,9 @@ export function validateSshProfile(profile: SshProfile): SshProfileIssue[] {
   }
   if (profile.authType === 'key' && !text(profile.privateKeyPath)) {
     issues.push({ field: 'privateKeyPath', key: 'newSession.keyRequired' });
+  }
+  for (const issue of validatePortForwards(profile.portForwards)) {
+    issues.push({ field: 'portForwards', key: issue.key });
   }
   return issues;
 }
@@ -130,6 +155,8 @@ export function buildSshSpecFromProfile(
 
   return {
     kind: 'ssh',
+    portForwards: normalizePortForwards(profile.portForwards),
+    loginCommands: normalizeLoginCommands(profile.loginCommands),
     target: {
       host: profile.host,
       port: normalizePort(profile.port),

@@ -1,3 +1,4 @@
+import { upsertCredential } from '@shared/credentials';
 import { createDefaultSettings } from '@shared/defaults';
 import { resolveLocale, translate } from '@shared/i18n';
 import { createSshProfile } from '@shared/profiles';
@@ -296,7 +297,10 @@ function seedSshProfiles(): SshProfile[] {
       username: 'root',
       authType: 'password',
       password: 'demo-password',
-      notes: 'Jump host for the 192.0.2.0/24 range.',
+      portForwards: [
+        { mode: 'local', bindHost: '127.0.0.1', bindPort: 21380, targetHost: '192.0.2.10', targetPort: 80 },
+      ],
+      loginCommands: ['cd /var/log', 'tail -n 20 syslog'],
       createdAt: isoMinus(72 * 60 * MINUTE),
       updatedAt: isoMinus(18 * MINUTE),
       lastUsedAt: isoMinus(18 * MINUTE),
@@ -309,7 +313,7 @@ function seedSshProfiles(): SshProfile[] {
       authType: 'key',
       privateKeyPath: 'C:\\Users\\demo\\.ssh\\easyshell_deploy_ed25519',
       hostKeyPolicy: 'strict',
-      notes: 'Release user. The key lives on the hardware-backed agent.',
+      loginCommands: ['cd /srv/app', 'git status --short'],
       createdAt: isoMinus(8 * 24 * 60 * MINUTE),
       updatedAt: isoMinus(3 * 24 * 60 * MINUTE),
       lastUsedAt: isoMinus(26 * 60 * MINUTE),
@@ -404,6 +408,8 @@ interface MockState {
   agentListeners: Set<(event: AgentEvent) => void>;
   agentSeq: number;
   sftpListeners: Set<(event: SftpEvent) => void>;
+  /** The login each session's demo `ssh` line asked for, so saving can find it. */
+  credentialTargets: Map<string, { username: string; host: string }>;
 }
 
 /* --------------------------------------------------------------- demo files */
@@ -631,9 +637,11 @@ function commandOutput(state: MockState, session: SessionInfo, line: string): st
 function handleInput(state: MockState, session: SessionInfo, data: string): void {
   let out = '';
   let line = state.buffers.get(session.id) ?? '';
+  let submittedLine = '';
   for (const char of data) {
     if (char === '\r' || char === '\n') {
       state.buffers.set(session.id, '');
+      submittedLine = line;
       out += '\r\n';
       out += commandOutput(state, session, line);
       out += state.prompts.get(session.id) ?? '';
@@ -658,6 +666,25 @@ function handleInput(state: MockState, session: SessionInfo, data: string): void
   state.buffers.set(session.id, line);
   touch(state, session.id);
   if (out) emit(state, { type: 'session-output', id: session.id, data: out });
+
+  // `ssh alice@host` in the demo asks the same question a real login asks.
+  const ssh = /^ssh\s+(?:-\S+\s+)*(\S+)$/.exec(submittedLine.trim());
+  if (ssh) {
+    const target = ssh[1] ?? '';
+    const at = target.lastIndexOf('@');
+    const username = at > 0 ? target.slice(0, at) : 'root';
+    const host = at > 0 ? target.slice(at + 1) : target;
+    if (host) {
+      state.credentialTargets.set(session.id, { username, host });
+      window.setTimeout(() => {
+        emit(state, {
+          type: 'session-credential',
+          id: session.id,
+          request: { kind: 'save', label: `${username}@${host}`, username, host },
+        });
+      }, 350);
+    }
+  }
 }
 
 function displayNameFor(spec: SessionSpec, settings: Settings): string {
@@ -741,6 +768,7 @@ export function createMockBridge(): EasyShellBridge {
     agentListeners: new Set(),
     agentSeq: 0,
     sftpListeners: new Set(),
+    credentialTargets: new Map(),
   };
 
   const find = (id: string): SessionInfo | null =>
@@ -857,6 +885,39 @@ export function createMockBridge(): EasyShellBridge {
     async execInSession(): Promise<ExecResult> {
       await new Promise((resolve) => window.setTimeout(resolve, 120));
       return { code: 0, stdout: 'demo output', stderr: '', timedOut: false };
+    },
+
+    /*
+     * The demo has no real prompts, so an `ssh` line stands in for one: the
+     * popover shows up exactly as it would after a login that landed, which is
+     * what makes it reviewable in `npm run dev:web`.
+     */
+    async respondCredential(id: string, decision: 'accept' | 'dismiss') {
+      const session = find(id);
+      if (!session) return;
+      emit(state, { type: 'session-credential', id, request: null });
+      if (decision !== 'accept') return;
+      // The demo keeps the password as well, so the saved list on the settings
+      // page grows from a demo login exactly as it does from a real one.
+      const target = state.credentialTargets.get(id);
+      if (target) {
+        const now = Date.now();
+        const credentials = upsertCredential(state.settings.vault.credentials, {
+          id: `cred-demo-${state.seq}`,
+          username: target.username,
+          host: target.host,
+          password: 'demo-password',
+          createdAt: now,
+          updatedAt: now,
+        });
+        state.settings = { ...state.settings, vault: { credentials } };
+        emit(state, { type: 'settings-updated', settings: state.settings });
+      }
+      emit(state, {
+        type: 'session-output',
+        id,
+        data: `\r\ndemo: password kept\r\n${state.prompts.get(id) ?? ''}`,
+      });
     },
 
     /* The demo answers the editor's test button after a beat, so the pending

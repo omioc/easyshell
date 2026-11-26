@@ -20,6 +20,15 @@ export type SessionStatus = 'connecting' | 'connected' | 'exited' | 'error';
 
 export type HostKeyPolicy = 'accept-new' | 'strict' | 'insecure';
 
+/** The listener is local in local mode, and on the SSH server in remote mode. */
+export interface SshPortForward {
+  mode: 'local' | 'remote';
+  bindHost: string;
+  bindPort: number;
+  targetHost: string;
+  targetPort: number;
+}
+
 export type SshAuth =
   | { type: 'password'; password: string }
   | { type: 'key'; privateKeyPath: string; passphrase?: string }
@@ -58,6 +67,9 @@ export interface SessionSpecWsl {
 export interface SessionSpecSsh {
   kind: 'ssh';
   target: SshTarget;
+  portForwards?: SshPortForward[];
+  /** Commands typed into the shell, in order, once the login is up. */
+  loginCommands?: string[];
 }
 
 export type SessionSpecBody = SessionSpecLocal | SessionSpecWsl | SessionSpecSsh;
@@ -281,11 +293,44 @@ export interface SshHostFacts {
 }
 
 /**
+ * One remembered password.
+ *
+ * The key is the login, not the tab: `username@host[:port]`, so the same answer
+ * works for a host reached directly and for the same host reached through a
+ * bastion. The password is the only secret here and it is sealed on disk.
+ */
+export interface SshCredential {
+  id: string;
+  username: string;
+  host: string;
+  /** Only stored when the login was not on 22. */
+  port?: number;
+  /** Plain in memory, `enc:v1:…` on disk. */
+  password: string;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt?: number;
+}
+
+/** One question the credential popover asks about `user@host`. */
+export interface CredentialRequest {
+  /** `save`: the login worked, keep the password. `fill`: a saved one is waiting. */
+  kind: 'save' | 'fill';
+  /** `user@host[:port]`, as the popover says it. */
+  label: string;
+  username: string;
+  host: string;
+  port?: number;
+}
+
+/**
  * A saved SSH connection.
  *
- * Secrets live in `settings.json` in the user's profile directory, in plain
- * text. That is deliberate for a local tool; the UI says so where the field is
- * edited, and nothing is ever sent anywhere except to the SSH server itself.
+ * Secrets live in `settings.json` in the user's profile directory. A password
+ * and a key passphrase are sealed by the OS key store (`src/main/secrets.ts`);
+ * where the machine has no key store they are written as they are, which is
+ * exactly what the editor's note under the field says. Nothing is ever sent
+ * anywhere except to the SSH server itself.
  */
 export interface SshProfile {
   id: string;
@@ -300,7 +345,9 @@ export interface SshProfile {
   passphrase?: string;
   /** Optional per-profile host key policy override. */
   hostKeyPolicy?: HostKeyPolicy;
-  notes?: string;
+  portForwards?: SshPortForward[];
+  /** Commands typed into the shell, in order, right after the login. */
+  loginCommands?: string[];
 
   /**
    * What the last session on this machine reported about itself.
@@ -395,6 +442,12 @@ export interface Settings {
   };
   /** Sidebar groups of saved connections. Empty until the user makes one. */
   workspaces: WorkspaceGroup[];
+  /**
+   * Passwords the app may type into a password prompt: one per `user@host` it
+   * watched a login succeed on. Sealed on disk exactly like a saved host's
+   * password (see `src/main/secrets.ts`).
+   */
+  vault: { credentials: SshCredential[] };
   probe: ProbeSettings;
   api: ApiSettings;
   identity: IdentityMetadata;
@@ -484,7 +537,14 @@ export type SessionEvent =
   | { type: 'session-metadata'; id: string; metadata: SessionMetadata }
   | { type: 'session-closed'; id: string; code: number | null }
   | { type: 'settings-updated'; settings: Settings }
-  | { type: 'notice'; notice: NoticePayload };
+  | { type: 'notice'; notice: NoticePayload }
+  /**
+   * A credential question for one terminal: a password prompt of a login typed
+   * in that shell is waiting, or a login just went through and could be
+   * remembered. `request: null` retracts it — answered, dismissed, or the user
+   * simply started typing.
+   */
+  | { type: 'session-credential'; id: string; request: CredentialRequest | null };
 
 /* ------------------------------------------------------------------ requests */
 
@@ -704,6 +764,12 @@ export interface EasyShellBridge {
   detachSession(id: string): Promise<void>;
   probeSession(id: string): Promise<SessionMetadata>;
   execInSession(id: string, command: string, timeoutMs?: number): Promise<ExecResult>;
+  /**
+   * Answers the credential question in a terminal: `accept` saves the password
+   * the user just typed, or types the saved one into the waiting prompt;
+   * `dismiss` means "not now" and the terminal is left to the user.
+   */
+  respondCredential(id: string, decision: 'accept' | 'dismiss'): Promise<void>;
   /**
    * Opens a connection to the host, then hangs up. Nothing is saved and no tab
    * is created - it answers one question: would this host let us in?

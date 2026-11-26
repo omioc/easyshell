@@ -28,6 +28,13 @@ export type NestedSignal =
    */
   | { type: 'push'; hop: SessionHop }
   /**
+   * What the line the user just submitted says the machine may ask a password
+   * for: `sudo` authenticates the account running it, `su` the one it switches
+   * to. `via: null` is a line that asks for no password at all — which is how a
+   * `sudo` stops being believed once the user has moved on to something else.
+   */
+  | { type: 'escalation'; via: 'sudo' | 'su' | null; account?: string }
+  /**
    * One report of leaving a hop. `origin` says whether the user typed it or a
    * layer of the stack printed it, and `host` names the machine a printed
    * report is about (`Connection to 198.18.0.9 closed.`): both are what tells a
@@ -382,6 +389,14 @@ export class NestedDetector {
     const line = this.line.value;
     this.line.reset();
     if (doubtful) return;
+    // Every submitted line is a statement about the next password prompt, and
+    // the one it replaces must not survive: a `sudo -i` from two commands ago
+    // says nothing about the bare `Password:` on screen now. A bare Enter says
+    // nothing either way, so it is left out.
+    if (line.trim()) {
+      const escalation = parseEscalation(line);
+      signals.push(escalation ? { type: 'escalation', ...escalation } : { type: 'escalation', via: null });
+    }
     const signal = analyseCommandLine(line, now);
     if (!signal) return;
     // A typed line is the user's own word: it always ends a hop, and it opens
@@ -625,6 +640,39 @@ function parseSudo(tokens: string[]): { user: string } | null {
   // `sudo bash -c 'systemctl restart nginx'` is a command, not a shell.
   const runsACommand = args.some((arg) => arg === '-c' || arg.startsWith('--command'));
   return runsACommand ? null : { user: account ?? 'root' };
+}
+
+/**
+ * The password a `sudo` or a `su` is about to ask for.
+ *
+ * The two are not the same question, and answering one with the other's account
+ * is how a saved password ends up typed at the wrong prompt: `sudo`
+ * authenticates the account that is already logged in, whatever it goes on to
+ * run — `sudo -i`, `sudo su`, `sudo systemctl restart nginx` are all the same
+ * password — while `su` authenticates the account it switches to, which is a
+ * login of its own on the same machine and can be in the vault on its own too.
+ *
+ * This says only what the command means. Whether a prompt appears at all is the
+ * machine's business: a `sudo` answered from the sudoers cache asks nothing, and
+ * a line that asks nothing never looks at this.
+ */
+export function parseEscalation(command: string): { via: 'sudo' | 'su'; account?: string } | null {
+  const tokens = stripInputNoise(command).trim().split(/\s+/).filter(Boolean);
+  const head = tokens.shift();
+  if (head === 'sudo') return { via: 'sudo' };
+  if (head !== 'su') return null;
+
+  // `su`, `su -`, `su - postgres`, `su --login app`: the first operand is the
+  // account, and no operand at all means root. `su -c '…'` runs a command as
+  // that same account, so what follows `-c` is a command, not an account.
+  let account: string | undefined;
+  for (const token of tokens) {
+    if (token === '-c' || token === '--command') break;
+    if (token.startsWith('-')) continue;
+    account = token;
+    break;
+  }
+  return { via: 'su', account: account ?? 'root' };
 }
 
 /** Classifies one typed command line. Returns a signal for anything that moves the session. */

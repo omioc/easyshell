@@ -151,3 +151,80 @@
   border-color: rgba(220, 61, 67, 0.6);
   color: #ff9ea1;
 }
+
+/*
+ * The credential question.
+ *
+ * It hangs over the top of the terminal it belongs to, centred, because the
+ * prompt it is about is right below it: a dialog in the middle of the window
+ * would cover the very thing the user is reading. It is one line of text and
+ * two buttons, so it stays out of the way of the output underneath, and it
+ * never takes the focus — the terminal keeps it, and typing is how you decline.
+ */
+.credential-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* As wide as its sentence needs, up to the terminal's own width: a truncated
+     question is a question the user has to guess at. */
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-surface);
+  background: var(--elevated);
+  box-shadow: var(--shadow-raised);
+
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+
+  /* It comes down from where the prompt is, not from nowhere. */
+  @starting-style {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+
+.credential-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.credential-bar-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.credential-bar-hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.credential-bar-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credential-bar {
+    transition: opacity var(--dur-in) ease;
+
+    @starting-style {
+      transform: translate(-50%, 0);
+    }
+  }
+}

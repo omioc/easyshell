@@ -48,6 +48,97 @@ export function looksLikeCredentialPrompt(text: string): boolean {
 }
 
 /**
+ * A prompt that is asking for a password, not for a confirmation.
+ *
+ * `Continue connecting (yes/no)?` and a host-key fingerprint are answered with
+ * a word that is not a password and must never be remembered as one, and a key
+ * passphrase belongs to a key rather than to `user@host` — so the question here
+ * is the narrow one: is the shell asking for a password?
+ */
+const PASSWORD_PROMPT = /(?:^|[^\w])password[^:\r\n]*[:?]\s*$/i;
+
+export function looksLikePasswordPrompt(text: string): boolean {
+  const line = promptOnScreen(text);
+  return line.length > 0 && PASSWORD_PROMPT.test(line);
+}
+
+/**
+ * The login a password prompt is asking about.
+ *
+ * `ssh` names the destination inside the prompt — `alice@203.0.113.13's
+ * password:` — which makes the prompt better evidence for who is being asked
+ * than anything read from the typed line. A command recalled from history, a
+ * line typed while the app was reading something else, the same prompt asked
+ * again after a refusal: none of those leave a command line that could be
+ * classified, and the prompt says the same thing every time.
+ *
+ * A prompt that names nobody is not one of these: `sudo` and `su` ask with a
+ * bare `Password:`, and their answer belongs to the account already in use
+ * rather than to a login the vault could key on.
+ */
+const POSSESSIVE_PROMPT = /^([\w.-]{1,64})@([\w.:\[\]-]{1,255})['’]s\s+password\b[^:]*[:?]\s*$/i;
+
+/** `Password for user@host:` — the shape plink and a few wrappers use. */
+const PASSWORD_FOR_PROMPT = /^password for\s+([\w.-]{1,64})@([\w.:\[\]-]{1,255})\s*[:?]\s*$/i;
+
+export function passwordPromptTarget(text: string): { username: string; host: string } | null {
+  const screen = promptOnScreen(text);
+  if (!screen) return null;
+  // A repaint that returned to column 0 leaves the prompt past the last CR.
+  const line = screen.slice(screen.lastIndexOf('\r') + 1).trim();
+  const match = POSSESSIVE_PROMPT.exec(line) ?? PASSWORD_FOR_PROMPT.exec(line);
+  if (!match) return null;
+  const username = match[1];
+  const host = match[2];
+  if (!username || !host) return null;
+  return { username, host };
+}
+
+/**
+ * The account a `sudo` prompt says it is asking about.
+ *
+ * `sudo` on Debian and Ubuntu writes its own name into the prompt —
+ * `[sudo] password for alice:` — and the account it names is the one running it,
+ * which is the password it wants. Unlike the `ssh` prompts above it says
+ * nothing about the machine, so it is only half an answer — the account — and
+ * the machine comes from the hop the user is standing on. It is also the half
+ * that survives a `sudo` recalled from history, whose command line nobody read.
+ */
+const SUDO_PROMPT = /^\[?sudo\]?\s+password\s+for\s+([\w.-]{1,32})\s*[:?]\s*$/i;
+
+export function sudoPromptUser(text: string): { username: string } | null {
+  const screen = promptOnScreen(text);
+  if (!screen) return null;
+  const line = screen.slice(screen.lastIndexOf('\r') + 1).trim();
+  const match = SUDO_PROMPT.exec(line);
+  const username = match?.[1];
+  return username ? { username } : null;
+}
+
+/**
+ * What has been typed into a line the terminal does not echo.
+ *
+ * A password may contain anything a keyboard can produce, but not the control
+ * codes that travel with it: an arrow key arrives as three bytes and none of
+ * them is text, and a backspace has to delete rather than be remembered as a
+ * character. Ctrl-C is the caller's business — it cancels the prompt instead of
+ * being part of the answer.
+ */
+export function typedAnswer(buffer: string, data: string): string {
+  const text = data
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/\x1b./g, '');
+  let answer = buffer;
+  for (const char of text) {
+    if (char === '\x7f' || char === '\b') answer = answer.slice(0, -1);
+    else if (char >= ' ' && char !== '\x7f') answer += char;
+  }
+  // A paste is capped: nothing legitimate is longer, and the value is going to
+  // be written straight into a prompt.
+  return answer.length > 1024 ? answer.slice(-1024) : answer;
+}
+
+/**
  * The run of text the cursor is standing on in `text`.
  *
  * A terminal returns to column 0 with a bare CR — no line break — so what was

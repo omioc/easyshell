@@ -137,6 +137,22 @@ describe('buildSshSpecFromProfile', () => {
     expect(spec.target.hostKeyPolicy).toBe('strict');
   });
 
+  it('carries the port forwards and login commands a profile holds', () => {
+    const spec = buildSshSpecFromProfile(
+      profile({
+        portForwards: [
+          { mode: 'local', bindHost: '127.0.0.1', bindPort: 21380, targetHost: '198.51.100.5', targetPort: 8080 },
+        ],
+        loginCommands: [' cd /var/log ', '', 'tail -f syslog'],
+      }),
+      options,
+    );
+    if (spec?.kind !== 'ssh') throw new Error('expected ssh spec');
+    expect(spec.portForwards).toHaveLength(1);
+    // Blank lines are dropped and each command is trimmed: the list is what runs.
+    expect(spec.loginCommands).toEqual(['cd /var/log', 'tail -f syslog']);
+  });
+
   it('refuses an incomplete profile', () => {
     expect(buildSshSpecFromProfile(createSshProfile({}), options)).toBeNull();
   });

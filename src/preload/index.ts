@@ -43,6 +43,7 @@ const bridge: EasyShellBridge = {
   probeSession: (id) => invoke<SessionMetadata>('session:probe', id),
   execInSession: (id, command, timeoutMs) => invoke<ExecResult>('session:exec', id, command, timeoutMs),
   testConnection: (spec) => invoke<ConnectionTestResult>('connection:test', spec),
+  respondCredential: (id, decision) => invoke<void>('session:credential', id, decision),
 
   getSettings: () => invoke<Settings>('settings:get'),
   updateSettings: (patch: DeepPartial<Settings>) => invoke<Settings>('settings:update', patch),

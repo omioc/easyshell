@@ -62,6 +62,9 @@ export function createDefaultSettings(os: PlatformOs): Settings {
       profiles: [],
     },
     workspaces: [],
+    // Remembered passwords are opt-in: empty until a login succeeds and the user
+    // says yes to keeping the password.
+    vault: { credentials: [] },
     probe: {
       enabled: true,
       intervalMs: 30_000,

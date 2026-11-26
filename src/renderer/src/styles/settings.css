@@ -1011,3 +1011,81 @@
 .settings-cli-custom[open] > summary {
   color: var(--text);
 }
+
+/*
+ * Remembered passwords, as tags that flow.
+ *
+ * One login is one tag, and a tag is as wide as what it says: the row is a
+ * name, not a table cell, so it never stretches to the column's width. Tags sit
+ * next to each other and wrap only when there is no room left. The bin sits
+ * inside the tag it belongs to — it is the only thing that can be done to it —
+ * and it is the one control on this page that destroys something, which is what
+ * its hover colour says.
+ *
+ * No secret is shown here, not even a masked one.
+ */
+.credential-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credential-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 1px 1px 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--hover);
+  transition: border-color var(--dur-out) ease;
+}
+
+.credential-chip:hover {
+  border-color: var(--border-strong);
+}
+
+.credential-chip-label {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.credential-chip-remove {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  /* Colour and press only: a tag must not look like it is moving. */
+  transition:
+    color var(--dur-out) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+
+.credential-chip-remove:hover {
+  color: var(--danger);
+}
+
+.credential-chip-remove:active {
+  transform: scale(0.9);
+}
+
+.credential-chip-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

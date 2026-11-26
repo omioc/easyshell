@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   createSshProfile,
+  normalizeLoginCommands,
   normalizePort,
   removeSshProfile,
   sshProfileTarget,
@@ -13,6 +14,9 @@ import type { ConnectionTestResult, HostKeyPolicy, SshProfile } from '@shared/ty
 import { useT } from '../i18n';
 import { Field, NumberInput, Segmented, Select, TextInput } from './Fields';
 import { IconCheck, IconClose, IconEye, IconEyeOff, IconFolder } from './Icons';
+import { LoginCommandsEditor } from './LoginCommandsEditor';
+import { PortForwardEditor } from './PortForwardEditor';
+import { normalizePortForwards } from '@shared/port-forwards';
 
 type AuthMode = 'password' | 'key' | 'agent';
 
@@ -106,6 +110,8 @@ export function ConnectionEditor({
       host: draft.host.trim(),
       username: draft.username.trim(),
       port: normalizePort(draft.port, defaultPort),
+      portForwards: normalizePortForwards(draft.portForwards),
+      loginCommands: normalizeLoginCommands(draft.loginCommands),
       updatedAt: Date.now(),
     };
     onPersist(upsertSshProfile(profiles, saved));
@@ -183,174 +189,184 @@ export function ConnectionEditor({
 
       <div className="settings-content connections-content">
         <div className="connections-form">
-          <Field label={t('connections.name')} error={nameError} htmlFor="cm-name">
-            <TextInput
-              id="cm-name"
-              testId="profile-name"
-              value={draft.name}
-              placeholder={t('connections.namePlaceholder')}
-              invalid={Boolean(nameError)}
-              autoFocus
-              onValueChange={(value) => patch({ name: value })}
-            />
-          </Field>
+          <section className="conn-group" aria-labelledby="cm-basic-title">
+            <h3 className="conn-group-label" id="cm-basic-title">
+              <span className="conn-group-mark" aria-hidden="true" />
+              {t('connections.basic')}
+            </h3>
 
-          <div className="field-grid">
-            <Field label={t('newSession.host')} error={errorFor('host')} htmlFor="cm-host">
+            <Field label={t('connections.name')} error={nameError} htmlFor="cm-name">
               <TextInput
-                id="cm-host"
-                testId="profile-host"
-                value={draft.host}
-                mono
-                spellCheck={false}
-                placeholder={t('connections.hostPlaceholder')}
-                invalid={Boolean(errorFor('host'))}
-                onValueChange={(value) => patch({ host: value })}
+                id="cm-name"
+                testId="profile-name"
+                value={draft.name}
+                placeholder={t('connections.namePlaceholder')}
+                invalid={Boolean(nameError)}
+                autoFocus
+                onValueChange={(value) => patch({ name: value })}
               />
             </Field>
-            <Field label={t('newSession.port')} error={errorFor('port')} htmlFor="cm-port">
-              <NumberInput
-                id="cm-port"
-                testId="profile-port"
-                value={draft.port}
-                min={1}
-                max={65535}
-                onCommit={(value) => patch({ port: value })}
-              />
-            </Field>
-          </div>
 
-          <Field label={t('newSession.user')} error={errorFor('username')} htmlFor="cm-user">
-            <TextInput
-              id="cm-user"
-              testId="profile-user"
-              value={draft.username}
-              mono
-              spellCheck={false}
-              placeholder={t('connections.userPlaceholder')}
-              invalid={Boolean(errorFor('username'))}
-              onValueChange={(value) => patch({ username: value })}
-            />
-          </Field>
-
-          <Field label={t('newSession.auth')}>
-            <Segmented<AuthMode>
-              name="cm-auth"
-              ariaLabel={t('newSession.auth')}
-              value={draft.authType}
-              onChange={(value) => patch({ authType: value })}
-              options={[
-                { value: 'password', label: t('newSession.auth.password'), testId: 'auth-password' },
-                { value: 'key', label: t('newSession.auth.key'), testId: 'auth-key' },
-                { value: 'agent', label: t('newSession.auth.agent'), testId: 'auth-agent' },
-              ]}
-            />
-          </Field>
-
-          {draft.authType === 'password' ? (
-            <>
-              <Field label={t('newSession.password')} htmlFor="cm-password">
-                <div className="input-with-action">
-                  <TextInput
-                    id="cm-password"
-                    testId="profile-password"
-                    type={secretVisible ? 'text' : 'password'}
-                    value={draft.password ?? ''}
-                    onValueChange={(value) => patch({ password: value })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={secretVisible ? t('connections.hideSecret') : t('connections.showSecret')}
-                    data-tip={secretVisible ? t('connections.hideSecret') : t('connections.showSecret')}
-                    aria-pressed={secretVisible}
-                    onClick={() => setSecretVisible((value) => !value)}
-                  >
-                    {secretVisible ? <IconEyeOff size={14} /> : <IconEye size={14} />}
-                  </button>
-                </div>
-              </Field>
-              <p className="secret-note">
-                {t(secretsEncrypted ? 'connections.secretNote' : 'connections.secretNotePlain')}
-              </p>
-            </>
-          ) : null}
-
-          {draft.authType === 'key' ? (
-            <>
-              <Field
-                label={t('newSession.privateKey')}
-                error={errorFor('privateKeyPath')}
-                htmlFor="cm-key-path"
-              >
-                <div className="input-with-action">
-                  <TextInput
-                    id="cm-key-path"
-                    testId="profile-key-path"
-                    value={draft.privateKeyPath ?? ''}
-                    mono
-                    readOnly
-                    placeholder={t('connections.pickKeyHint')}
-                    invalid={Boolean(errorFor('privateKeyPath'))}
-                    onValueChange={(value) => patch({ privateKeyPath: value })}
-                  />
-                  <button
-                    type="button"
-                    className="button"
-                    data-testid="profile-pick-key"
-                    onClick={() => void pickKey()}
-                  >
-                    <IconFolder size={13} />
-                    {t('connections.pickKey')}
-                  </button>
-                </div>
-              </Field>
-              <Field label={t('newSession.passphrase')} htmlFor="cm-passphrase">
+            <div className="field-grid">
+              <Field label={t('newSession.host')} error={errorFor('host')} htmlFor="cm-host">
                 <TextInput
-                  id="cm-passphrase"
-                  testId="profile-passphrase"
-                  type="password"
-                  value={draft.passphrase ?? ''}
-                  onValueChange={(value) => patch({ passphrase: value })}
+                  id="cm-host"
+                  testId="profile-host"
+                  value={draft.host}
+                  mono
+                  spellCheck={false}
+                  placeholder={t('connections.hostPlaceholder')}
+                  invalid={Boolean(errorFor('host'))}
+                  onValueChange={(value) => patch({ host: value })}
                 />
               </Field>
-              <p className="secret-note">
-                {t(secretsEncrypted ? 'connections.secretNote' : 'connections.secretNotePlain')}
-              </p>
-            </>
-          ) : null}
+              <Field label={t('newSession.port')} error={errorFor('port')} htmlFor="cm-port">
+                <NumberInput
+                  id="cm-port"
+                  testId="profile-port"
+                  value={draft.port}
+                  min={1}
+                  max={65535}
+                  onCommit={(value) => patch({ port: value })}
+                />
+              </Field>
+            </div>
 
-          {draft.authType === 'agent' ? <p className="secret-note">{t('connections.agentHint')}</p> : null}
+            <Field label={t('newSession.user')} error={errorFor('username')} htmlFor="cm-user">
+              <TextInput
+                id="cm-user"
+                testId="profile-user"
+                value={draft.username}
+                mono
+                spellCheck={false}
+                placeholder={t('connections.userPlaceholder')}
+                invalid={Boolean(errorFor('username'))}
+                onValueChange={(value) => patch({ username: value })}
+              />
+            </Field>
 
-          <Field label={t('connections.hostKeyOverride')} htmlFor="cm-host-key">
-            <Select
-              id="cm-host-key"
-              testId="profile-host-key"
-              value={draft.hostKeyPolicy ?? ''}
-              onChange={(value) =>
-                patch({ hostKeyPolicy: value === '' ? undefined : (value as HostKeyPolicy) })
-              }
-              options={[
-                { value: '', label: t('connections.hostKeyDefault') },
-                ...HOST_KEY_POLICIES.map((policy) => ({
-                  value: policy,
-                  label: t(`settings.connection.hostKeyPolicy.${policy}`),
-                })),
-              ]}
-            />
-          </Field>
+            <Field label={t('newSession.auth')}>
+              <Segmented<AuthMode>
+                name="cm-auth"
+                ariaLabel={t('newSession.auth')}
+                value={draft.authType}
+                onChange={(value) => patch({ authType: value })}
+                options={[
+                  { value: 'password', label: t('newSession.auth.password'), testId: 'auth-password' },
+                  { value: 'key', label: t('newSession.auth.key'), testId: 'auth-key' },
+                  { value: 'agent', label: t('newSession.auth.agent'), testId: 'auth-agent' },
+                ]}
+              />
+            </Field>
 
-          <Field label={t('connections.notes')} htmlFor="cm-notes">
-            <textarea
-              id="cm-notes"
-              className="input textarea"
-              data-testid="profile-notes"
-              rows={3}
-              spellCheck={false}
-              value={draft.notes ?? ''}
-              onChange={(event) => patch({ notes: event.target.value })}
-            />
-          </Field>
+            {draft.authType === 'password' ? (
+              <>
+                <Field label={t('newSession.password')} htmlFor="cm-password">
+                  <div className="input-with-action">
+                    <TextInput
+                      id="cm-password"
+                      testId="profile-password"
+                      type={secretVisible ? 'text' : 'password'}
+                      value={draft.password ?? ''}
+                      onValueChange={(value) => patch({ password: value })}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={secretVisible ? t('connections.hideSecret') : t('connections.showSecret')}
+                      data-tip={secretVisible ? t('connections.hideSecret') : t('connections.showSecret')}
+                      aria-pressed={secretVisible}
+                      onClick={() => setSecretVisible((value) => !value)}
+                    >
+                      {secretVisible ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                    </button>
+                  </div>
+                </Field>
+                <p className="secret-note">
+                  {t(secretsEncrypted ? 'connections.secretNote' : 'connections.secretNotePlain')}
+                </p>
+              </>
+            ) : null}
+
+            {draft.authType === 'key' ? (
+              <>
+                <Field
+                  label={t('newSession.privateKey')}
+                  error={errorFor('privateKeyPath')}
+                  htmlFor="cm-key-path"
+                >
+                  <div className="input-with-action">
+                    <TextInput
+                      id="cm-key-path"
+                      testId="profile-key-path"
+                      value={draft.privateKeyPath ?? ''}
+                      mono
+                      readOnly
+                      placeholder={t('connections.pickKeyHint')}
+                      invalid={Boolean(errorFor('privateKeyPath'))}
+                      onValueChange={(value) => patch({ privateKeyPath: value })}
+                    />
+                    <button
+                      type="button"
+                      className="button"
+                      data-testid="profile-pick-key"
+                      onClick={() => void pickKey()}
+                    >
+                      <IconFolder size={13} />
+                      {t('connections.pickKey')}
+                    </button>
+                  </div>
+                </Field>
+                <Field label={t('newSession.passphrase')} htmlFor="cm-passphrase">
+                  <TextInput
+                    id="cm-passphrase"
+                    testId="profile-passphrase"
+                    type="password"
+                    value={draft.passphrase ?? ''}
+                    onValueChange={(value) => patch({ passphrase: value })}
+                  />
+                </Field>
+                <p className="secret-note">
+                  {t(secretsEncrypted ? 'connections.secretNote' : 'connections.secretNotePlain')}
+                </p>
+              </>
+            ) : null}
+
+            {draft.authType === 'agent' ? (
+              <p className="secret-note">{t('connections.agentHint')}</p>
+            ) : null}
+
+            <Field label={t('connections.hostKeyOverride')} htmlFor="cm-host-key">
+              <Select
+                id="cm-host-key"
+                testId="profile-host-key"
+                value={draft.hostKeyPolicy ?? ''}
+                onChange={(value) =>
+                  patch({ hostKeyPolicy: value === '' ? undefined : (value as HostKeyPolicy) })
+                }
+                options={[
+                  { value: '', label: t('connections.hostKeyDefault') },
+                  ...HOST_KEY_POLICIES.map((policy) => ({
+                    value: policy,
+                    label: t(`settings.connection.hostKeyPolicy.${policy}`),
+                  })),
+                ]}
+              />
+            </Field>
+          </section>
+
+          <PortForwardEditor
+            value={draft.portForwards}
+            submitted={submitted}
+            onChange={(portForwards) => patch({ portForwards })}
+          />
+
+          <LoginCommandsEditor
+            value={draft.loginCommands}
+            onChange={(loginCommands) =>
+              patch({ loginCommands: loginCommands.length > 0 ? loginCommands : undefined })
+            }
+          />
         </div>
       </div>
 

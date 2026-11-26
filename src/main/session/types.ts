@@ -1,4 +1,5 @@
 import type { SFTPWrapper } from 'ssh2';
+import type { PortForwardFailure } from '../../shared/port-forwards';
 import type { ExecResult, SessionKind } from '../../shared/types';
 
 export type ExecShell = 'posix' | 'powershell' | 'cmd';
@@ -27,6 +28,14 @@ export interface BackendHandlers {
   onExit(code: number | null, error?: Error): void;
   onStatus(status: 'connecting' | 'connected'): void;
   onError(message: string): void;
+  /**
+   * A tunnel the user configured did not come up.
+   *
+   * Separate from `onError` because the session is fine: the shell works, the
+   * login worked, and only a port forward is missing. Reporting it as a
+   * connection error would paint a working tab red.
+   */
+  onForwardError(failure: PortForwardFailure): void;
 }
 
 export interface SessionBackend {

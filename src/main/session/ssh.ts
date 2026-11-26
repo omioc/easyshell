@@ -4,6 +4,7 @@ import { Client } from 'ssh2';
 import type { ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
 import type { ExecResult, SessionSpecSsh, Settings } from '../../shared/types';
 import { KnownHostsStore } from './known-hosts';
+import { SshPortForwarding } from './port-forwarding';
 import { withWorkingDirectory } from './types';
 import type { BackendHandlers, ExecOptions, SessionBackend } from './types';
 import { encodePowerShellCommand } from '../metadata/probe';
@@ -82,6 +83,7 @@ function buildConnectConfig(options: SshConnectOptions): ConnectConfig {
 export function startSshSession(options: SshSessionOptions): Promise<SessionBackend> {
   const { handlers, cols, rows, spec } = options;
   const client = new Client();
+  const forwarding = new SshPortForwarding(client, spec.portForwards, handlers.onForwardError);
   let stream: ClientChannel | null = null;
   let finished = false;
   let ready = false;
@@ -89,6 +91,7 @@ export function startSshSession(options: SshSessionOptions): Promise<SessionBack
   const finish = (code: number | null, error?: Error) => {
     if (finished) return;
     finished = true;
+    forwarding.close();
     handlers.onExit(code, error);
   };
 
@@ -102,6 +105,7 @@ export function startSshSession(options: SshSessionOptions): Promise<SessionBack
       stream?.setWindow(Math.max(2, nextRows), Math.max(2, nextCols), 0, 0);
     },
     kill() {
+      forwarding.close();
       try {
         stream?.close();
       } catch {
@@ -124,6 +128,7 @@ export function startSshSession(options: SshSessionOptions): Promise<SessionBack
 
     const settleReject = (error: Error) => {
       finish(null, error);
+      client.end();
       reject(error);
     };
 
@@ -136,25 +141,41 @@ export function startSshSession(options: SshSessionOptions): Promise<SessionBack
     client.on('error', (error: Error) => {
       handlers.onError(error.message);
       finish(null, error);
+      client.end();
       if (!ready) reject(error);
     });
 
     client.on('close', () => {
+      if (!ready) {
+        settleReject(new Error('The host closed the connection before it was ready'));
+        return;
+      }
       finish(stream ? 0 : null);
     });
 
-    client.on('ready', () => {
+    client.on('ready', async () => {
+      // A tunnel that refuses to come up is not a login that failed: the shell
+      // below is what the tab is, and it is still worth opening.
+      try {
+        await forwarding.start();
+      } catch (error) {
+        handlers.onForwardError({
+          rule: '',
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+      if (finished) return;
       client.shell({ term: 'xterm-256color', cols, rows }, (error, channel) => {
         if (error) {
           settleReject(error);
           return;
         }
+        if (finished) { channel.close(); return; }
         stream = channel;
         ready = true;
         channel.on('data', (data: Buffer) => handlers.onData(data.toString('utf8')));
         channel.stderr.on('data', (data: Buffer) => handlers.onData(data.toString('utf8')));
         channel.on('close', () => {
-          handlers.onStatus('connected');
           finish(0);
           client.end();
         });

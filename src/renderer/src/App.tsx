@@ -24,6 +24,7 @@ import type {
   AgentToolCallInfo,
   BootstrapPayload,
   ConnectionTestResult,
+  CredentialRequest,
   DeepPartial,
   Locale,
   SessionEvent,
@@ -41,6 +42,7 @@ import { mergeSettings } from './lib/settings';
 import { activeScheme, applyScheme } from './lib/theme';
 import { AgentPanel } from './components/AgentPanel';
 import { ConnectionEditor } from './components/ConnectionManager';
+import { CredentialPromptBar } from './components/CredentialPromptBar';
 import {
   IconArrowRight,
   IconClose,
@@ -159,6 +161,8 @@ export function App() {
   /** A multi-line paste waiting for the user to look at it before it is sent. */
   const [pasteRequest, setPasteRequest] = useState<{ sessionId: string; text: string } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  /** Per terminal: the credential question on screen, if any. */
+  const [credentialRequests, setCredentialRequests] = useState<Record<string, CredentialRequest>>({});
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
@@ -300,6 +304,19 @@ export function App() {
     [pushToast],
   );
 
+  /** The popover's answer, and the bar goes away as soon as it is given. */
+  const respondCredential = useCallback(
+    (sessionId: string, decision: 'accept' | 'dismiss') => {
+      setCredentialRequests((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+      void getBridge().respondCredential(sessionId, decision);
+    },
+    [],
+  );
+
   const handleEvent = useCallback(
     (event: SessionEvent) => {
       switch (event.type) {
@@ -342,6 +359,17 @@ export function App() {
             setActiveId(event.id);
           }
           break;
+        case 'session-credential': {
+          // What the terminal should ask, straight from main: the popover is a
+          // view of one decision, never a second source of truth about it.
+          setCredentialRequests((current) => {
+            const next = { ...current };
+            if (event.request) next[event.id] = event.request;
+            else delete next[event.id];
+            return next;
+          });
+          break;
+        }
         case 'session-closed': {
           removeSession(event.id);
           if (event.code !== null && event.code !== 0) {
@@ -1120,6 +1148,7 @@ export function App() {
               ) : null}
               {sessions.map((session) => {
                 const active = session.id === activeId;
+                const credentialRequest = credentialRequests[session.id];
                 return (
                   <div key={session.id} className="terminal-slot" data-active={active ? 'true' : undefined}>
                     <TerminalPane
@@ -1131,6 +1160,12 @@ export function App() {
                       onPasteRequest={requestPaste}
                       onCopyFailed={reportCopyFailed}
                     />
+                    {credentialRequest ? (
+                      <CredentialPromptBar
+                        request={credentialRequest}
+                        onRespond={(decision) => respondCredential(session.id, decision)}
+                      />
+                    ) : null}
                     {session.status !== 'connected' ? (
                       <div className="terminal-state" data-status={session.status}>
                         <span className="status-dot" data-status={session.status} aria-hidden="true" />

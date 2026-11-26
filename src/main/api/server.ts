@@ -30,7 +30,8 @@ function publicProfile(profile: SshProfile): Record<string, unknown> {
     authType: profile.authType,
     privateKeyPath: profile.privateKeyPath,
     hostKeyPolicy: profile.hostKeyPolicy,
-    notes: profile.notes,
+    portForwards: profile.portForwards,
+    loginCommands: profile.loginCommands,
     hasPassword: Boolean(profile.password),
     hasPassphrase: Boolean(profile.passphrase),
     createdAt: profile.createdAt,
@@ -50,6 +51,11 @@ function publicSettings(settings: Settings): Settings {
         password: profile.password ? '***' : undefined,
         passphrase: profile.passphrase ? '***' : undefined,
       })),
+    },
+    // The API never hands out a password, remembered ones included: an agent may
+    // use the vault (it answers prompts in a terminal) but not read it.
+    vault: {
+      credentials: settings.vault.credentials.map((entry) => ({ ...entry, password: '***' })),
     },
   };
 }

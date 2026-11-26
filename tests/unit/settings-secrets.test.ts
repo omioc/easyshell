@@ -144,6 +144,21 @@ describe('the fields a settings file carries as secrets', () => {
     expect(hasSealedSecrets(settingsWith([profile('hunter2')]))).toBe(false);
     expect(hasSealedSecrets(sealSettingsSecrets(settingsWith([profile('hunter2')]), cipher))).toBe(true);
   });
+
+  it('seals a remembered password and leaves the login readable', () => {
+    const remembered = {
+      ...settingsWith([]),
+      vault: {
+        credentials: [
+          { id: 'cred-1', username: 'root', host: '198.51.100.9', password: 'hunter2', createdAt: 1, updatedAt: 1 },
+        ],
+      },
+    };
+    const sealed = sealSettingsSecrets(remembered, cipher);
+    expect(isSealed(sealed.vault?.credentials?.[0]?.password ?? '')).toBe(true);
+    expect(sealed.vault?.credentials?.[0]?.host).toBe('198.51.100.9');
+    expect(openSettingsSecrets(sealed, cipher).vault?.credentials?.[0]?.password).toBe('hunter2');
+  });
 });
 
 describe('a settings store that keeps its secrets sealed', () => {
