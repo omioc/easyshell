@@ -106,12 +106,40 @@ The API is for the local machine only. Do not expose it to the internet or hand 
 - Choose from several UI and terminal colour schemes, and set the terminal font, size, cursor and window layout.
 - Command-line launch parsing and a configurable copy of the application identity metadata, for specific bastion compatibility cases. The identity feature only rewrites file information in the generated copy: it adds no digital signature and bypasses no network audit or access control. Check your organisation's rules before using it.
 
+### Plugins and bastion single sign-on (sso://)
+
+Optional integrations are plugins, each with its own switch under **Settings → Plugins**. Switched off, a plugin stops claiming its OS links and stops parsing its command-line shapes immediately, with no restart.
+
+The bundled `sso` plugin handles the `sso://<base64 JSON>` link a USM-class bastion hands over: it reads `IPv4`, `Port`, `Username` and the one-time `SSOToken` (used as the password) from `NODE_COMMON` and opens an SSH session — the equivalent of `sshpass -p <SSOToken> ssh -p <Port> <Username>@<IPv4>`.
+
+- The packaged app declares the `sso` and `easyshell` schemes in `Info.plist`; while the plugin is enabled it claims `sso` through `setAsDefaultProtocolClient`. macOS delivers links through `open-url`, and a command-line argument works too.
+- Only SSH assets are handled; the token is one-time, so an expired payload has to be clicked again on the bastion page.
+- To hand `sso://` back to the vendor client, run `EasyShell --release-sso` once, or turn the plugin off in Settings.
+
+Bastions do not agree on the link shape, so **the format is configurable** (Settings → Plugins → Bastion single sign-on → Link format):
+
+| Setting | Meaning | Default |
+| --- | --- | --- |
+| URL scheme | Which schemes to claim (several allowed) | `sso` |
+| Payload encoding | `base64 JSON` or `JSON` | `base64 JSON` |
+| Payload container | Key the asset object sits under; empty means the root | `NODE_COMMON` |
+| Host / port / username / token field | The four field names, case-insensitive, falling back to common aliases | `IPv4` / `Port` / `Username` / `SSOToken` |
+| Asset protocols | Which `AssetProtocol` values are accepted; empty means no check | `ssh` |
+
+Changes take effect immediately: the plugin releases the old scheme and claims the new one, no restart. The one build-time constraint is the declaration itself — macOS only routes a URL to an app that declared its scheme in `Info.plist`, so any scheme other than `sso` / `easyshell` is added once, while packaging:
+
+```bash
+EASYSHELL_URL_SCHEMES="usm,jumpserver" npm run dist:mac
+```
+
+A plugin lives in `src/main/plugins/`: one file describes its protocol (which tokens are its own, what login they decode to) and the URL schemes it needs, plus one line in `PLUGINS` in `src/main/plugins/index.ts`. Neither the main process nor the renderer needs to change.
+
 ## Platforms and packaging
 
 The project is built on Electron, React, TypeScript and xterm.js. The source configures these distribution targets:
 
 - **Windows x64:** NSIS installer, portable build and ZIP.
-- **macOS:** DMG.
+- **macOS:** DMG (`npm run dist:mac`; a local arm64 build sets `identity: null` to skip certificate discovery, and `scripts/after-pack.cjs` ad-hoc signs the bundle before the dmg is written, so it launches by double-click).
 - **Linux:** AppImage and deb.
 - **WSL:** WSL distribution sessions are available on Windows only.
 

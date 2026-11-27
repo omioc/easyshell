@@ -28,6 +28,7 @@ import type {
   AgentTaskOptions,
   PlatformInfo,
   PlatformOs,
+  PluginInfo,
   SessionEvent,
   SessionMetadata,
   SessionSpec,
@@ -48,6 +49,13 @@ import type { CliCommand, CliParseContext } from './cli/parse';
 import { applyIdentity } from './identity/spoof';
 import { readHostPlatform } from './metadata/platform';
 import { paths } from './paths';
+import {
+  PluginRuntime,
+  linkPlugins,
+  pluginCatalog,
+  pluginHelpLines,
+  releaseRequest,
+} from './plugins';
 import { SftpManager } from './sftp/manager';
 import { KnownHostsStore } from './session/known-hosts';
 import { SessionManager } from './session/manager';
@@ -72,6 +80,31 @@ let agentBridge: AgentBridge | null = null;
 let sftpManager: SftpManager | null = null;
 let manager: SessionManager;
 let wslDistributions: string[] = [];
+
+/**
+ * A link can arrive before the window exists: macOS delivers `sso://…` as an
+ * Apple Event while the app is still starting, so it is parked here and handled
+ * once the initial invocation has created its tabs.
+ */
+let pendingUrl: string | null = null;
+let readyForUrls = false;
+
+/**
+ * The plugin host: the only bridge between a plugin file and the running app.
+ * Claiming a scheme is an operating-system action, so it lives here rather than
+ * in the plugin, which stays a description of a protocol.
+ */
+const pluginRuntime = new PluginRuntime({
+  platform,
+  settings: () => settingsStore.get(),
+  claimUrlScheme: (scheme) => {
+    if (platform !== 'darwin' && platform !== 'win32') return false;
+    return app.setAsDefaultProtocolClient(scheme);
+  },
+  releaseUrlScheme: (scheme) => {
+    app.removeAsDefaultProtocolClient(scheme);
+  },
+});
 
 function broadcast(event: SessionEvent): void {
   noteHostFacts(event);
@@ -168,6 +201,9 @@ function parseContext(): CliParseContext {
     profiles: settings.shell.profiles,
     defaultProfileId: settings.shell.defaultProfileId,
     defaultDistribution: settings.shell.wslDefaultDistribution,
+    // Only the plugins the user left on: the parser cannot know `sso://`, and a
+    // plugin that was switched off must stop answering links immediately.
+    plugins: linkPlugins(settings),
   };
 }
 
@@ -219,6 +255,25 @@ function focusWindow(): void {
   mainWindow.show();
   mainWindow.focus();
 }
+
+/**
+ * A link the OS handed over becomes the invocation a command line would have
+ * produced. Which schemes are ours is the plugins' business, so this stays one
+ * line: the parser already knows the ones still enabled.
+ */
+async function openExternalUrl(url: string): Promise<void> {
+  focusWindow();
+  await handleInvocation(parseInvocation([url], parseContext()));
+}
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (!readyForUrls) {
+    pendingUrl = url;
+    return;
+  }
+  void openExternalUrl(url);
+});
 
 async function handleInvocation(command: CliCommand): Promise<void> {
   if (command.type !== 'spawn') return;
@@ -442,6 +497,10 @@ function registerIpc(): void {
     }
     mainWindow.webContents.startDrag({ file: first, files: paths, icon });
   });
+
+  // The catalog is static, so the page reads it once; whether a plugin actually
+  // runs is the settings' answer, which the page already subscribes to.
+  ipcMain.handle('plugins:list', (): PluginInfo[] => pluginCatalog());
 
   ipcMain.handle('settings:get', () => settingsStore.get());
   ipcMain.handle('settings:update', async (_event, patch: DeepPartial<Settings>): Promise<Settings> => {
@@ -690,6 +749,12 @@ async function startApp(): Promise<void> {
   nativeTheme.themeSource = settingsStore.get().appearance.theme;
   if (platform === 'win32') app.setAppUserModelId('com.easyshell.app');
 
+  // Optional capabilities come on before any link can legitimately arrive, and
+  // follow the settings from then on: a switch claims or releases its schemes
+  // without a restart, and the parser reads the same list on every invocation.
+  pluginRuntime.sync(settingsStore.get());
+  settingsStore.on('change', (next: Settings) => pluginRuntime.sync(next));
+
   wslDistributions = await listWslDistributions();
   registerIpc();
 
@@ -708,6 +773,15 @@ async function startApp(): Promise<void> {
 
   const invocation = parseInvocation(extractCliArgs(process.argv, app.isPackaged), parseContext());
   await handleInvocation(invocation);
+
+  // A link that arrived while the app was booting waited for the first
+  // invocation's tabs; from here on it is handled the moment it arrives.
+  readyForUrls = true;
+  if (pendingUrl) {
+    const url = pendingUrl;
+    pendingUrl = null;
+    void openExternalUrl(url);
+  }
 
   app.on('second-instance', (_event, argv) => {
     void handleInvocation(parseInvocation(extractCliArgs(argv, app.isPackaged), parseContext()));
@@ -736,6 +810,23 @@ async function startApp(): Promise<void> {
 
 async function main(): Promise<void> {
   const argv = extractCliArgs(process.argv, app.isPackaged);
+
+  // Escape hatch for a plugin's scheme claim: hand the schemes back to whatever
+  // client had them before, without uninstalling anything. This works whether or
+  // not the plugin is enabled, because a user who turned it off may still want
+  // the vendor client back after a crash.
+  const release = releaseRequest(argv);
+  if (release) {
+    // The configured schemes, not a hard-coded list: whatever the user's bastion
+    // uses is what gets handed back.
+    const schemes = release.urlSchemes(settingsStore.get());
+    for (const scheme of schemes) app.removeAsDefaultProtocolClient(scheme);
+    const names = schemes.length > 0 ? schemes.map((scheme) => `${scheme}://`).join(', ') : '(none)';
+    writeSync(1, `${names} handler released\n`);
+    app.exit(0);
+    return;
+  }
+
   const invocation = parseInvocation(argv, parseContext());
 
   if (invocation.type === 'help') {
@@ -746,6 +837,7 @@ async function main(): Promise<void> {
         '  easyshell -newtab "<cmd>"     bastion invocation (MobaXterm syntax)',
         '  easyshell -ssh <host> -l <user> -p <port> -pw <password>',
         '  easyshell -url ssh://user@host:22',
+        ...pluginHelpLines(settingsStore.get()),
         '  easyshell --local <profile> | --wsl <distro> | --new-ssh user@host',
         '  easyshell ls | info <id> | probe <id> | input <id> <text> | exec <id> -- <command>',
         '',

@@ -15,6 +15,7 @@ import type {
   SessionEvent,
   SessionInfo,
   SessionMetadata,
+  PluginInfo,
   SessionSpec,
   SessionSpecSsh,
   Settings,
@@ -47,6 +48,7 @@ const bridge: EasyShellBridge = {
 
   getSettings: () => invoke<Settings>('settings:get'),
   updateSettings: (patch: DeepPartial<Settings>) => invoke<Settings>('settings:update', patch),
+  listPlugins: () => invoke<PluginInfo[]>('plugins:list'),
   applyIdentity: () => invoke<ApplyIdentityResult>('identity:apply'),
   revealIdentity: () => invoke<void>('identity:reveal'),
   listWslDistributions: () => invoke<string[]>('platform:wsl'),

@@ -7,6 +7,8 @@ import { isAgentPermissionMode } from '@shared/agent';
 import type { DeepPartial, PlatformOs, Settings } from '@shared/types';
 import { normalizeSshProfiles } from '../shared/profiles';
 import { normalizeCredentials } from '../shared/credentials';
+import { normalizeDisabledPlugins } from '@shared/plugins';
+import { normalizeSsoSettings } from '@shared/sso';
 import { normalizeWorkspaces, pruneWorkspaces } from '../shared/workspaces';
 import { paths } from './paths';
 import { type SecretCipher, createSecretCipher, isSealed } from './secrets';
@@ -58,6 +60,14 @@ export function normalizeSettings(input: DeepPartial<Settings>, platform: Platfo
   // Remembered logins are repaired like hosts are: an entry without a password,
   // a username or a host cannot answer anything and is dropped.
   merged.vault = { credentials: normalizeCredentials(merged.vault?.credentials) };
+  // A plugin switch is a deny-list of ids, so the only repair needed is to drop
+  // values that are not usable ids and keep the rest in order. The SSO mapping is
+  // repaired field by field: a half-written link shape must never reach the
+  // parser, which would then silently claim a URL it cannot decode.
+  merged.plugins = {
+    disabled: normalizeDisabledPlugins(merged.plugins?.disabled),
+    sso: normalizeSsoSettings(merged.plugins?.sso),
+  };
   if (!merged.api.token) merged.api.token = generateToken();
   merged.api.port = clampNumber(merged.api.port, 1, 65535, API_DEFAULT_PORT);
   merged.probe.intervalMs = clampNumber(merged.probe.intervalMs, 5000, 600000, defaults.probe.intervalMs);

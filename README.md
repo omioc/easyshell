@@ -106,12 +106,40 @@ API 只面向本机使用。不要将其转发到公网或交给不可信进程�
 - 提供多套界面和终端配色，并可配置终端字体、字号、光标及窗口布局。
 - 提供命令行启动参数解析和可配置的应用身份元数据副本，服务于特定堡垒机兼容场景。身份元数据功能只修改生成副本的文件信息，不会生成数字签名，也不会绕过网络审计或访问控制；使用前请确认符合所在组织的规定。
 
+### 插件与堡垒机单点登录（sso://）
+
+可选的接入能力以插件形式提供，每个插件可以在**设置 → 插件**里单独开关；关掉后它立即停止认领系统链接、停止解析命令行参数，无需重启。
+
+随应用内置的 `sso` 插件处理 USM 类堡垒机下发的 `sso://<base64 JSON>` 链接：解出 `NODE_COMMON` 中的 `IPv4`、`Port`、`Username` 与一次性 `SSOToken`（作为密码），直接开一个 SSH 会话，等价于 `sshpass -p <SSOToken> ssh -p <Port> <Username>@<IPv4>`。
+
+- 打包版在 `Info.plist` 里声明了 `sso` / `easyshell` 两个 scheme，插件启用时调用 `setAsDefaultProtocolClient` 接管堡垒机链接；macOS 走 `open-url` 事件，命令行参数也直接支持。
+- 只处理 SSH 资产；token 是一次性的，过期后需要回堡垒机页面重新点一次。
+- 想把 `sso://` 还给厂商客户端：`EasyShell --release-sso`，或在设置里关掉该插件。
+
+不同堡垒机的链接形状并不统一，因此**链接格式是可配置的**（设置 → 插件 → 堡垒机单点登录 → 链接格式）：
+
+| 配置项 | 作用 | 默认值 |
+| --- | --- | --- |
+| URL scheme | 接管哪些协议（可多个） | `sso` |
+| 载荷编码 | `base64 JSON` 或 `JSON` | `base64 JSON` |
+| 载荷容器 | 资产对象所在的键，留空表示根节点 | `NODE_COMMON` |
+| 主机 / 端口 / 用户名 / 令牌字段 | 四个字段名，不区分大小写，缺失时回退常见别名 | `IPv4` / `Port` / `Username` / `SSOToken` |
+| 资产协议白名单 | 只接受哪些 `AssetProtocol`，留空表示不校验 | `ssh` |
+
+修改即时生效：插件会释放旧 scheme、认领新 scheme，不需要重启。唯一受打包限制的是 scheme 声明——macOS 只把 URL 交给在 `Info.plist` 里声明过该 scheme 的应用，所以使用 `sso` / `easyshell` 之外的协议时，打包时追加一次即可：
+
+```bash
+EASYSHELL_URL_SCHEMES="usm,jumpserver" npm run dist:mac
+```
+
+插件在 `src/main/plugins/` 下实现：一个文件描述协议（哪些 token 是自己的、解析成什么登录）与它要声明的 URL scheme，再在 `src/main/plugins/index.ts` 的 `PLUGINS` 里加一行即可，主进程与渲染进程都无需改动。
+
 ## 平台与打包
 
 项目基于 Electron、React、TypeScript 与 xterm.js。源码配置了以下发行目标：
 
 - **Windows x64：** NSIS 安装包、portable 便携版与 ZIP 包。
-- **macOS：** DMG。
+- **macOS：** DMG（`npm run dist:mac`；本机 arm64 打包时用 `identity: null` 跳过证书查找，`scripts/after-pack.cjs` 在出包前做 ad-hoc 签名，双击即可运行）。
 - **Linux：** AppImage 与 deb。
 - **WSL：** 仅 Windows 环境提供 WSL 发行版会话。
 

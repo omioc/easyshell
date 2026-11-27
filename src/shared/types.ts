@@ -424,6 +424,55 @@ export interface WorkspaceGroup {
   profileIds: string[];
 }
 
+/**
+ * The shape a bastion hands its link over in.
+ *
+ * Vendors differ in every part of it — the URL scheme, whether the JSON sits in
+ * a container, and what the host, port, user and one-time token fields are
+ * called. Keeping that in settings means a new bastion is a form, not a build.
+ */
+export interface SsoPluginSettings {
+  /** URL schemes claimed while the plugin is on; declared in the bundle at build time. */
+  schemes: string[];
+  /** How the part after `scheme://` is encoded. */
+  format: 'base64-json' | 'json';
+  /** Asset protocols accepted; empty means "do not check". */
+  protocols: string[];
+  /** Key the asset object sits under; empty means the JSON root. */
+  container: string;
+  hostField: string;
+  portField: string;
+  usernameField: string;
+  tokenField: string;
+}
+
+/** Which optional capabilities this install runs. */
+export interface PluginSettings {
+  /**
+   * Plugins the user turned off, by id. A deny-list, not an allow-list: a plugin
+   * added in a later version starts on without a settings migration, and an id
+   * left behind by a plugin that was removed is simply ignored.
+   */
+  disabled: string[];
+  /** The `sso` plugin's own mapping; defaults match the USM shape. */
+  sso: SsoPluginSettings;
+}
+
+/**
+ * One plugin as the settings page sees it.
+ *
+ * The schemes a plugin claims are settings, not catalog data: the page renders
+ * the plugin's own form for them, so this only answers "what is this".
+ */
+export interface PluginInfo {
+  id: string;
+  /** i18n keys for the row's title and explanation. */
+  labelKey: string;
+  descriptionKey: string;
+  /** What the plugin does while `plugins.disabled` does not name it. */
+  enabledByDefault: boolean;
+}
+
 export interface Settings {
   version: number;
   locale: 'auto' | Locale;
@@ -448,6 +497,8 @@ export interface Settings {
    * password (see `src/main/secrets.ts`).
    */
   vault: { credentials: SshCredential[] };
+  /** Optional capabilities: everything the app can turn off without rebuilding. */
+  plugins: PluginSettings;
   probe: ProbeSettings;
   api: ApiSettings;
   identity: IdentityMetadata;
@@ -778,6 +829,8 @@ export interface EasyShellBridge {
 
   getSettings(): Promise<Settings>;
   updateSettings(patch: DeepPartial<Settings>): Promise<Settings>;
+  /** The plugins this build ships, with the state the settings give them. */
+  listPlugins(): Promise<PluginInfo[]>;
   applyIdentity(): Promise<ApplyIdentityResult>;
   revealIdentity(): Promise<void>;
   listWslDistributions(): Promise<string[]>;

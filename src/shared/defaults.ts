@@ -1,3 +1,4 @@
+import { createDefaultSsoSettings } from './sso';
 import type { PlatformOs, Settings, ShellProfile } from './types';
 
 export const SETTINGS_VERSION = 1;
@@ -65,6 +66,9 @@ export function createDefaultSettings(os: PlatformOs): Settings {
     // Remembered passwords are opt-in: empty until a login succeeds and the user
     // says yes to keeping the password.
     vault: { credentials: [] },
+    // Nothing is turned off on a fresh install: every plugin runs with the
+    // default it declares. The `sso` mapping starts on the USM shape.
+    plugins: { disabled: [], sso: createDefaultSsoSettings() },
     probe: {
       enabled: true,
       intervalMs: 30_000,
