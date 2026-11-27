@@ -81,12 +81,25 @@ const POSSESSIVE_PROMPT = /^([\w.-]{1,64})@([\w.:\[\]-]{1,255})['’]s\s+passwor
 /** `Password for user@host:` — the shape plink and a few wrappers use. */
 const PASSWORD_FOR_PROMPT = /^password for\s+([\w.-]{1,64})@([\w.:\[\]-]{1,255})\s*[:?]\s*$/i;
 
+/**
+ * `(user@host) Password:` — the shape the OpenSSH client paints when the server
+ * offers keyboard-interactive authentication.
+ *
+ * Debian, Ubuntu and most appliances offer it, and the client prefers it over
+ * the `password` method, so on those hosts this is the prompt a login actually
+ * meets. It names the login and the address that was dialed in brackets rather
+ * than with an apostrophe; a prompt nobody recognises is a prompt whose answer
+ * the app can only attribute to a typed line it may not have been able to read.
+ */
+const KEYBOARD_INTERACTIVE_PROMPT = /^\(([\w.-]{1,64})@([\w.:\[\]-]{1,255})\)\s+password\b[^:]*[:?]\s*$/i;
+
 export function passwordPromptTarget(text: string): { username: string; host: string } | null {
   const screen = promptOnScreen(text);
   if (!screen) return null;
   // A repaint that returned to column 0 leaves the prompt past the last CR.
   const line = screen.slice(screen.lastIndexOf('\r') + 1).trim();
-  const match = POSSESSIVE_PROMPT.exec(line) ?? PASSWORD_FOR_PROMPT.exec(line);
+  const match =
+    POSSESSIVE_PROMPT.exec(line) ?? PASSWORD_FOR_PROMPT.exec(line) ?? KEYBOARD_INTERACTIVE_PROMPT.exec(line);
   if (!match) return null;
   const username = match[1];
   const host = match[2];

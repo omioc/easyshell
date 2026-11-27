@@ -217,6 +217,29 @@ describe('a password prompt of a login typed in the terminal', () => {
     expect(state.asked).toHaveLength(1);
   });
 
+  it('is answered by a click even though the click moves the focus', () => {
+    const { state, desk } = harness();
+    state.tail = PASSWORD_PROMPT;
+    desk.onOutput();
+    desk.onInput('hunter2');
+    desk.onInput('\r');
+    lands(state);
+    desk.onLanded();
+    expect(state.asked).toHaveLength(1);
+
+    // The popover's buttons are the mouse's, and taking the focus away from the
+    // terminal makes it report focus-out on the same stream the user types on.
+    // That report is not an answer: reading it as one retracts the question the
+    // click is meant for, and the password is then neither typed nor kept.
+    desk.onInput('\x1b[O');
+    desk.onInput('\x1b[I');
+    expect(state.retracted).toBe(0);
+
+    desk.respond('accept');
+    expect(state.vault).toHaveLength(1);
+    expect(state.vault[0]?.password).toBe('hunter2');
+  });
+
 });
 
 describe('a password the app already remembers', () => {

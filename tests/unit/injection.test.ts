@@ -4,7 +4,9 @@ import {
   injectionTailToDisplay,
   isBarePromptRepaint,
   looksLikeCredentialPrompt,
+  looksLikePasswordPrompt,
   looksLikePromptTail,
+  passwordPromptTarget,
   promptIdentity,
   promptOnScreen,
   stripAnsi,
@@ -197,5 +199,37 @@ describe('looksLikeCredentialPrompt', () => {
 describe('stripAnsi', () => {
   it('removes CSI and OSC sequences', () => {
     expect(stripAnsi('\x1b[1;32mhello\x1b[0m \x1b]0;t\x07')).toBe('hello ');
+  });
+});
+
+describe('passwordPromptTarget', () => {
+  it('names the login a prompt is asking about', () => {
+    expect(passwordPromptTarget("alice@203.0.113.13's password: ")).toEqual({
+      username: 'alice',
+      host: '203.0.113.13',
+    });
+    expect(passwordPromptTarget('Password for bob@bastion: ')).toEqual({ username: 'bob', host: 'bastion' });
+  });
+
+  it('reads the keyboard-interactive prompt the OpenSSH client paints', () => {
+    // What `ssh` prints on a host that offers keyboard-interactive auth — which
+    // Debian, Ubuntu and most appliances do, and which the client prefers.
+    expect(passwordPromptTarget('(alice@203.0.113.13) Password: ')).toEqual({
+      username: 'alice',
+      host: '203.0.113.13',
+    });
+    expect(looksLikePasswordPrompt('(alice@203.0.113.13) Password: ')).toBe(true);
+    expect(passwordPromptTarget('\x1b[m(alice@host4) Password: ')).toEqual({ username: 'alice', host: 'host4' });
+  });
+
+  it('does not claim a prompt that names nobody', () => {
+    // `sudo` and `su` ask about the account already in use: the machine comes
+    // from the hop the user stands on, not from the prompt.
+    expect(passwordPromptTarget('[sudo] password for alice: ')).toBeNull();
+    expect(passwordPromptTarget('Password: ')).toBeNull();
+    // A confirmation is not a password, and a bracket around a host alone names
+    // no login.
+    expect(passwordPromptTarget('(yes/no) password: ')).toBeNull();
+    expect(passwordPromptTarget('(host4) Password: ')).toBeNull();
   });
 });

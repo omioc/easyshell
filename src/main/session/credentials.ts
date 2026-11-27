@@ -35,6 +35,19 @@ import {
 import type { CredentialRequest, SessionHop, SshCredential } from '../../shared/types';
 import { looksLikePasswordPrompt, passwordPromptTarget, sudoPromptUser, typedAnswer } from './injection';
 
+/**
+ * Input that is not typing.
+ *
+ * A terminal reports focus in and out (`ESC [ I`, `ESC [ O`) and the edges of a
+ * bracketed paste on the same stream the user types on, because the shell asked
+ * it to. Clicking one of the popover's buttons takes the focus away from the
+ * terminal first, so those bytes arrive exactly when the question is being
+ * answered — and reading them as typing withdraws the question the click was
+ * meant for, leaving the password neither typed nor kept.
+ */
+const TERMINAL_NOISE =
+  /^(?:\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>])*$/;
+
 /** The login a prompt belongs to. */
 interface Target {
   username: string;
@@ -130,6 +143,9 @@ export class CredentialDesk {
 
   /** The user typed: a secret, an Enter, or nothing that concerns this desk. */
   onInput(data: string): void {
+    // Focus reports, mouse reports and paste markers are not typing: there is
+    // nothing to answer, and nothing to withdraw either.
+    if (TERMINAL_NOISE.test(data)) return;
     // Whatever is being typed, the question has been answered by hand.
     if (this.request) {
       const wasSave = this.request.kind === 'save';

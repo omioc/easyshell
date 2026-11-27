@@ -1482,6 +1482,15 @@ export class SessionManager {
         }
         const update = adoptTitle(chain, signal);
         changed = changed || update.changed;
+        // A shell paints its title when it is ready for input, and a login is the
+        // one moment another machine's own name appears there. The line that got
+        // the user in may have been recalled from history or completed by the
+        // line editor, leaving the app with nothing to read — and a `PS1` without
+        // `\u@\h` paints no prompt the chain could follow either. The title names
+        // the account, which is all the desk needs to know a login landed.
+        if (signal.username) {
+          runtime.credential.onLanded({ username: signal.username, host: signal.host ?? '' });
+        }
       }
     }
 
@@ -1618,6 +1627,13 @@ export class SessionManager {
     // with; every later one is the shell renaming where the user stands.
     if (firstPrompt) {
       this.dropCandidate(runtime);
+      // The chain has nothing to follow: a local tab's own prompt names no
+      // account, so the first `user@host` prompt painted in one is the login
+      // that was just typed, and a session that opened on a machine has told the
+      // chain about it already. Either way the login did happen, and a password
+      // typed at the prompt it asked is worth offering to keep — the desk holds
+      // it until a prompt says somebody got in, and this is that prompt.
+      runtime.credential.onLanded({ username: identity.username, host: identity.hostname });
       return;
     }
     // Another shell is painting its prompt: whatever was typed at the prompt
