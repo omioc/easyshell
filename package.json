@@ -1,6 +1,6 @@
 {
   "name": "easyshell",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Minimal cross-platform terminal: local shells, WSL, SSH, bastion friendly, agent ready.",
   "main": "./out/main/index.js",
   "license": "MIT",
