@@ -627,19 +627,15 @@
   background: var(--surface-raised, transparent);
 }
 
-/* The switch stays on the title line; the plugin's own form sits under it. */
+/*
+ * The switch sits on the title line, so the description under it owns the whole
+ * row instead of being squeezed into the column left beside the switch.
+ */
 .settings-plugin-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.settings-plugin-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
 }
 
 .settings-plugin-name {
@@ -665,12 +661,55 @@
   color: var(--text);
 }
 
+/*
+ * One rhythm for the whole form. Without it every row ran flush against the one
+ * above: the hint under a field touched the next field's label, and the reset
+ * button sat directly on the input it followed. The gap is the same one the
+ * plugin list uses between its rows, so the panel reads as one column.
+ *
+ * Chromium puts everything after the summary in an internal `::details-content`
+ * box, so those rows are not flex items of the `details` element; spacing them
+ * takes the pseudo-element. An engine without it lays the children out directly,
+ * which the rule above already covers.
+ */
+.settings-plugin-config[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-plugin-config[open]::details-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * The reset is an action, not a row of the form: it keeps its own width instead
+ * of stretching to the column the fields fill.
+ */
+.settings-plugin-config button.button {
+  align-self: flex-start;
+}
+
 /* Field names are short; pairs fit on one line without shrinking the inputs. */
 .settings-plugin-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 16px;
 }
+
+/*
+ * The three unpaired fields - the scheme list, the protocol list and the
+ * container key - carry the longest hints in this form, so they sit outside the
+ * pair grid and get the whole row for the hint. Their input still stops at one
+ * column: half the row, minus the half of the column gap each side, which is the
+ * measure the paired inputs already fill.
+ */
+.settings-plugin-config .field:not(:where(.settings-plugin-grid *)) .input {
+  max-width: calc(50% - 8px);
+}
+
 /* ------------------------------------------------------------ scheme picker */
 
 .scheme-grid {

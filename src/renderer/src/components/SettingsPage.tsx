@@ -8,6 +8,7 @@ import type {
   IdentityMetadata,
   PlatformInfo,
   PluginInfo,
+  RevealIdentityResult,
   Settings,
   ShellProfile,
   SsoPluginSettings,
@@ -94,7 +95,7 @@ export interface SettingsPageProps {
   onClose: () => void;
   patch: (patch: DeepPartial<Settings>) => void;
   onApplyIdentity: () => Promise<ApplyIdentityResult>;
-  onRevealIdentity: () => void;
+  onRevealIdentity: () => Promise<RevealIdentityResult>;
   onRefreshSettings: () => Promise<void>;
 }
 
@@ -299,19 +300,20 @@ function SsoConfigEditor({
         />
       </Field>
 
+      <Field
+        label={t('settings.plugins.sso.container')}
+        htmlFor="set-sso-container"
+        hint={t('settings.plugins.sso.containerHint')}
+      >
+        <DebouncedInput
+          id="set-sso-container"
+          value={value.container}
+          mono
+          onCommit={(text) => patch({ container: text })}
+        />
+      </Field>
+
       <div className="settings-plugin-grid">
-        <Field
-          label={t('settings.plugins.sso.container')}
-          htmlFor="set-sso-container"
-          hint={t('settings.plugins.sso.containerHint')}
-        >
-          <DebouncedInput
-            id="set-sso-container"
-            value={value.container}
-            mono
-            onCommit={(text) => patch({ container: text })}
-          />
-        </Field>
         <Field
           label={t('settings.plugins.sso.host')}
           htmlFor="set-sso-host"
@@ -352,7 +354,7 @@ function SsoConfigEditor({
 
       <button
         type="button"
-        className="chip"
+        className="button"
         onClick={() => onChange(createDefaultSsoSettings())}
       >
         {t('settings.plugins.sso.reset')}
@@ -417,16 +419,15 @@ function PluginsPanel({
             {plugins.map((plugin) => (
               <div className="settings-plugin-row" key={plugin.id}>
                 <div className="settings-plugin-head">
-                  <div className="settings-plugin-copy">
-                    <p className="settings-plugin-name">{t(plugin.labelKey)}</p>
-                    <p className="settings-note">{t(plugin.descriptionKey)}</p>
-                  </div>
+                  <p className="settings-plugin-name">{t(plugin.labelKey)}</p>
                   <Switch
                     checked={isPluginEnabled(plugin, settings.plugins)}
                     label={t(plugin.labelKey)}
                     onChange={(checked) => setEnabled(plugin, checked)}
                   />
                 </div>
+
+                <p className="settings-note">{t(plugin.descriptionKey)}</p>
 
                 {plugin.id === 'sso' ? (
                   <SsoConfigEditor
@@ -548,6 +549,18 @@ export function SettingsPage({
       });
     } finally {
       setApplying(false);
+    }
+  };
+
+  /*
+   * A reveal that opened something stays quiet - the window it put in front of
+   * you is the answer. One that opened nothing (the artifact is gone, or nothing
+   * was ever written) reports through the same line the apply result uses.
+   */
+  const revealLocation = async () => {
+    const result = await onRevealIdentity();
+    if (!result.ok && result.messageKey) {
+      setApplyResult({ tone: 'warn', text: t(result.messageKey) });
     }
   };
 
@@ -1021,7 +1034,7 @@ export function SettingsPage({
                 >
                   {applying ? t('settings.identity.applying') : t('settings.identity.apply')}
                 </button>
-                <button type="button" className="button" onClick={onRevealIdentity}>
+                <button type="button" className="button" onClick={() => void revealLocation()}>
                   <IconFolder size={14} />
                   {t('settings.identity.reveal')}
                 </button>
