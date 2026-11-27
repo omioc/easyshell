@@ -17,6 +17,7 @@ import type {
   EasyShellBridge,
   ExecResult,
   PluginInfo,
+  RevealIdentityResult,
   SftpEntry,
   SftpEvent,
   SessionEvent,
@@ -985,8 +986,9 @@ export function createMockBridge(): EasyShellBridge {
       };
     },
 
-    async revealIdentity() {
-      /* the mock has nothing to reveal */
+    async revealIdentity(): Promise<RevealIdentityResult> {
+      /* The mock writes a path it never creates; nothing to open in a browser. */
+      return { ok: false, messageKey: 'settings.identity.reveal.missing' };
     },
 
     async listWslDistributions() {

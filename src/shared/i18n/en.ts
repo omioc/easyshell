@@ -183,6 +183,8 @@ export const en = {
   'settings.identity.apply': 'Apply metadata',
   'settings.identity.applying': 'Applying…',
   'settings.identity.reveal': 'Show artifact',
+  'settings.identity.reveal.none': 'No artifact has been written yet — apply the metadata first',
+  'settings.identity.reveal.missing': 'The artifact written last time is gone — a rebuild replaces it. Apply the metadata again',
   'settings.identity.lastApplied': 'Last applied: {path}',
   'settings.identity.neverApplied': 'No artifact written yet',
   'settings.identity.platform.win32': 'Writes a renamed executable with the version resource patched, next to the installed app',

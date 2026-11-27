@@ -183,6 +183,8 @@ export const zh = {
   'settings.identity.apply': '应用元数据',
   'settings.identity.applying': '写入中…',
   'settings.identity.reveal': '打开所在位置',
+  'settings.identity.reveal.none': '还没有写出副本，先点「应用元数据」',
+  'settings.identity.reveal.missing': '上一次写出的副本已不在了（重新打包会覆盖它），再点「应用元数据」写一份',
   'settings.identity.lastApplied': '上次写入：{path}',
   'settings.identity.neverApplied': '还没有写出副本',
   'settings.identity.platform.win32': '在安装目录旁写出一份改名的可执行文件，并改写其版本资源',

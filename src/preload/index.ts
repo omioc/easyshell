@@ -16,6 +16,7 @@ import type {
   SessionInfo,
   SessionMetadata,
   PluginInfo,
+  RevealIdentityResult,
   SessionSpec,
   SessionSpecSsh,
   Settings,
@@ -50,7 +51,7 @@ const bridge: EasyShellBridge = {
   updateSettings: (patch: DeepPartial<Settings>) => invoke<Settings>('settings:update', patch),
   listPlugins: () => invoke<PluginInfo[]>('plugins:list'),
   applyIdentity: () => invoke<ApplyIdentityResult>('identity:apply'),
-  revealIdentity: () => invoke<void>('identity:reveal'),
+  revealIdentity: () => invoke<RevealIdentityResult>('identity:reveal'),
   listWslDistributions: () => invoke<string[]>('platform:wsl'),
   pickPrivateKeyFile: () => invoke<string | null>('dialog:pick-private-key'),
   /** Native directory picker for a project task; null when cancelled. */

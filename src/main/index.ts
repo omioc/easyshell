@@ -11,8 +11,8 @@ import {
 } from 'electron';
 import { execFile } from 'node:child_process';
 import { homedir, hostname as osHostname, userInfo } from 'node:os';
-import { writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { resolveLocale, translate } from '../shared/i18n';
 import { recordHostFacts } from '../shared/profiles';
@@ -37,6 +37,7 @@ import type {
   SftpEvent,
   SftpListing,
   SftpOrigin,
+  RevealIdentityResult,
   WindowBridgeState,
 } from '../shared/types';
 import { ControlServer } from './api/server';
@@ -539,9 +540,25 @@ function registerIpc(): void {
     return result;
   });
 
-  ipcMain.handle('identity:reveal', () => {
+  /*
+   * Revealing an artifact a rebuild already replaced.
+   *
+   * `showItemInFolder` on a path that no longer exists is a silent no-op on
+   * Windows, which is how this button came to look dead: the recorded exe was
+   * written by an older build and the next `dist:win` wiped it. The handler now
+   * answers what it managed to open - the file when it is still there, the
+   * folder that held it otherwise - so the page can say why nothing appeared.
+   */
+  ipcMain.handle('identity:reveal', (): RevealIdentityResult => {
     const path = settingsStore.get().identity.lastAppliedPath;
-    if (path) shell.showItemInFolder(path);
+    if (!path) return { ok: false, messageKey: 'settings.identity.reveal.none' };
+    if (existsSync(path)) {
+      shell.showItemInFolder(path);
+      return { ok: true };
+    }
+    const folder = dirname(path);
+    if (existsSync(folder)) void shell.openPath(folder);
+    return { ok: false, messageKey: 'settings.identity.reveal.missing' };
   });
 
   ipcMain.handle('platform:wsl', () => listWslDistributions());

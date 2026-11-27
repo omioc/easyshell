@@ -614,6 +614,19 @@ export interface ApplyIdentityResult {
   portable?: boolean;
 }
 
+/**
+ * What `identity:reveal` managed to open.
+ *
+ * The stored artifact is a file on disk that a rebuild replaces, so a reveal can
+ * legitimately find nothing. `messageKey` carries the reason in that case; a
+ * reveal that worked says nothing, because a dialog for "I opened the folder you
+ * asked for" is noise.
+ */
+export interface RevealIdentityResult {
+  ok: boolean;
+  messageKey?: string;
+}
+
 export interface AttachSnapshot {
   data: string;
   cols: number;
@@ -832,7 +845,7 @@ export interface EasyShellBridge {
   /** The plugins this build ships, with the state the settings give them. */
   listPlugins(): Promise<PluginInfo[]>;
   applyIdentity(): Promise<ApplyIdentityResult>;
-  revealIdentity(): Promise<void>;
+  revealIdentity(): Promise<RevealIdentityResult>;
   listWslDistributions(): Promise<string[]>;
   /** Native open dialog filtered to private keys; null when cancelled. */
   pickPrivateKeyFile(): Promise<string | null>;

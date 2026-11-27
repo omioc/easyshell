@@ -1188,7 +1188,7 @@ export function App() {
                 onClose={() => setSettingsOpen(false)}
                 patch={(patch) => void patchSettings(patch)}
                 onApplyIdentity={() => getBridge().applyIdentity()}
-                onRevealIdentity={() => void getBridge().revealIdentity()}
+                onRevealIdentity={() => getBridge().revealIdentity()}
                 onRefreshSettings={refreshSettings}
               />
             ) : null}
