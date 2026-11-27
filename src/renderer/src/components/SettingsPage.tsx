@@ -7,13 +7,17 @@ import type {
   DeepPartial,
   IdentityMetadata,
   PlatformInfo,
+  PluginInfo,
   Settings,
   ShellProfile,
+  SsoPluginSettings,
   ThemeMode,
 } from '@shared/types';
+import { DECLARED_SSO_SCHEMES, createDefaultSsoSettings } from '@shared/sso';
 import { COLOR_SCHEMES, resolveScheme } from '@shared/themes';
 import { LOCALE_LABELS } from '@shared/i18n';
 import { credentialLabel, removeCredential } from '@shared/credentials';
+import { isPluginEnabled, togglePluginDisabled } from '@shared/plugins';
 import { getBridge } from '../bridge';
 import { useT } from '../i18n';
 import { IDENTITY_FIELDS, IDENTITY_PRESETS, matchPreset, presetValues } from '../lib/identityPresets';
@@ -32,6 +36,7 @@ import {
   IconAgent,
   IconCheck,
   IconClose,
+  IconCube,
   IconFolder,
   IconInfo,
   IconPalette,
@@ -44,7 +49,14 @@ import {
 } from './Icons';
 import type { IconProps } from './Icons';
 
-type SettingsSection = 'appearance' | 'shell' | 'connection' | 'agent' | 'identity' | 'about';
+type SettingsSection =
+  | 'appearance'
+  | 'shell'
+  | 'connection'
+  | 'agent'
+  | 'plugins'
+  | 'identity'
+  | 'about';
 
 /**
  * The page list, with the same ingredients as a sidebar row: one 16px glyph, one
@@ -60,6 +72,7 @@ const SECTIONS: Array<{
   { id: 'shell', labelKey: 'settings.tab.shell', icon: IconTerminal },
   { id: 'connection', labelKey: 'settings.tab.connection', icon: IconServer },
   { id: 'agent', labelKey: 'settings.tab.agent', icon: IconAgent },
+  { id: 'plugins', labelKey: 'settings.tab.plugins', icon: IconCube },
   { id: 'identity', labelKey: 'settings.tab.identity', icon: IconUser },
   { id: 'about', labelKey: 'settings.tab.about', icon: IconInfo },
 ];
@@ -213,6 +226,222 @@ function AgentCliCards({
         </div>
       )}
     </div>
+  );
+}
+
+function splitList(value: string): string[] {
+  return value
+    .split(/[\s,]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * The bastion link shape, editable.
+ *
+ * Every vendor names the scheme, the container and the four payload fields
+ * differently, so all of it is a form rather than a build. What a form cannot
+ * change is what macOS delivers: a scheme has to be declared in the bundle, hence
+ * the note naming the declared ones.
+ */
+function SsoConfigEditor({
+  value,
+  onChange,
+}: {
+  value: SsoPluginSettings;
+  onChange: (next: SsoPluginSettings) => void;
+}) {
+  const t = useT();
+  const patch = (next: Partial<SsoPluginSettings>) => onChange({ ...value, ...next });
+  const declared = DECLARED_SSO_SCHEMES.map((scheme) => `${scheme}://`).join(', ');
+
+  return (
+    <details className="settings-plugin-config">
+      <summary>{t('settings.plugins.sso.advanced')}</summary>
+
+      <p className="settings-note">{t('settings.plugins.sso.declared', { schemes: declared })}</p>
+
+      <Field
+        label={t('settings.plugins.sso.schemes')}
+        htmlFor="set-sso-schemes"
+        hint={t('settings.plugins.sso.schemesHint')}
+      >
+        <DebouncedInput
+          id="set-sso-schemes"
+          value={value.schemes.join(', ')}
+          mono
+          onCommit={(text) => patch({ schemes: splitList(text) })}
+        />
+      </Field>
+
+      <Field
+        label={t('settings.plugins.sso.protocols')}
+        htmlFor="set-sso-protocols"
+        hint={t('settings.plugins.sso.protocolsHint')}
+      >
+        <DebouncedInput
+          id="set-sso-protocols"
+          value={value.protocols.join(', ')}
+          mono
+          onCommit={(text) => patch({ protocols: splitList(text) })}
+        />
+      </Field>
+
+      <Field label={t('settings.plugins.sso.format')} htmlFor="set-sso-format">
+        <Select
+          id="set-sso-format"
+          value={value.format}
+          options={[
+            { value: 'base64-json', label: 'base64 JSON' },
+            { value: 'json', label: 'JSON' },
+          ]}
+          onChange={(next) => patch({ format: next === 'json' ? 'json' : 'base64-json' })}
+        />
+      </Field>
+
+      <div className="settings-plugin-grid">
+        <Field
+          label={t('settings.plugins.sso.container')}
+          htmlFor="set-sso-container"
+          hint={t('settings.plugins.sso.containerHint')}
+        >
+          <DebouncedInput
+            id="set-sso-container"
+            value={value.container}
+            mono
+            onCommit={(text) => patch({ container: text })}
+          />
+        </Field>
+        <Field
+          label={t('settings.plugins.sso.host')}
+          htmlFor="set-sso-host"
+          hint={t('settings.plugins.sso.fieldHint')}
+        >
+          <DebouncedInput
+            id="set-sso-host"
+            value={value.hostField}
+            mono
+            onCommit={(text) => patch({ hostField: text })}
+          />
+        </Field>
+        <Field label={t('settings.plugins.sso.port')} htmlFor="set-sso-port">
+          <DebouncedInput
+            id="set-sso-port"
+            value={value.portField}
+            mono
+            onCommit={(text) => patch({ portField: text })}
+          />
+        </Field>
+        <Field label={t('settings.plugins.sso.username')} htmlFor="set-sso-username">
+          <DebouncedInput
+            id="set-sso-username"
+            value={value.usernameField}
+            mono
+            onCommit={(text) => patch({ usernameField: text })}
+          />
+        </Field>
+        <Field label={t('settings.plugins.sso.token')} htmlFor="set-sso-token">
+          <DebouncedInput
+            id="set-sso-token"
+            value={value.tokenField}
+            mono
+            onCommit={(text) => patch({ tokenField: text })}
+          />
+        </Field>
+      </div>
+
+      <button
+        type="button"
+        className="chip"
+        onClick={() => onChange(createDefaultSsoSettings())}
+      >
+        {t('settings.plugins.sso.reset')}
+      </button>
+    </details>
+  );
+}
+
+/**
+ * The plugin list: one switch per capability this build ships.
+ *
+ * The catalog comes from the main process once, because a plugin is code — the
+ * page cannot enumerate it. Whether a plugin runs is pure settings, so a switch
+ * makes the same patch every other control does, and the main process reacts by
+ * claiming or releasing the plugin's URL schemes without a restart.
+ */
+function PluginsPanel({
+  settings,
+  patch,
+}: {
+  settings: Settings;
+  patch: (patch: DeepPartial<Settings>) => void;
+}) {
+  const t = useT();
+  const [plugins, setPlugins] = useState<PluginInfo[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getBridge()
+      .listPlugins()
+      .then((list) => {
+        if (!cancelled) setPlugins(list);
+      })
+      .catch(() => {
+        if (!cancelled) setPlugins([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setEnabled = (plugin: PluginInfo, enabled: boolean) => {
+    patch({
+      plugins: {
+        disabled: togglePluginDisabled(settings.plugins.disabled, plugin.id, enabled),
+      },
+    });
+  };
+
+  return (
+    <section className="settings-section">
+      <p className="settings-note">{t('settings.plugins.hint')}</p>
+
+      <div className="settings-block">
+        <p className="settings-block-title">{t('settings.plugins.installed')}</p>
+        {plugins === null ? (
+          <p className="settings-note">{t('settings.plugins.loading')}</p>
+        ) : plugins.length === 0 ? (
+          <p className="settings-note">{t('settings.plugins.empty')}</p>
+        ) : (
+          <div className="settings-plugin-list">
+            {plugins.map((plugin) => (
+              <div className="settings-plugin-row" key={plugin.id}>
+                <div className="settings-plugin-head">
+                  <div className="settings-plugin-copy">
+                    <p className="settings-plugin-name">{t(plugin.labelKey)}</p>
+                    <p className="settings-note">{t(plugin.descriptionKey)}</p>
+                  </div>
+                  <Switch
+                    checked={isPluginEnabled(plugin, settings.plugins)}
+                    label={t(plugin.labelKey)}
+                    onChange={(checked) => setEnabled(plugin, checked)}
+                  />
+                </div>
+
+                {plugin.id === 'sso' ? (
+                  <SsoConfigEditor
+                    value={settings.plugins.sso}
+                    onChange={(sso) => patch({ plugins: { sso } })}
+                  />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="settings-note">{t('settings.plugins.releaseHint')}</p>
+    </section>
   );
 }
 
@@ -741,6 +970,10 @@ export function SettingsPage({
               <p className="settings-note">{t('settings.agent.hint')}</p>
               <p className="settings-note">{t('settings.agent.modeHint')}</p>
             </section>
+          ) : null}
+
+          {section === 'plugins' ? (
+            <PluginsPanel settings={settings} patch={patch} />
           ) : null}
 
           {section === 'identity' ? (

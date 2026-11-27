@@ -18,6 +18,22 @@
 
 import type { HostKeyPolicy, Locale, SessionSpec, ShellProfile } from '../../shared/types';
 
+/**
+ * A link shape one plugin adds to the command line.
+ *
+ * The parser knows none of them: a plugin says which tokens are its own
+ * (`sso://…`) and what login they describe, and the same `SessionSpec` a
+ * copied `ssh` line produces comes out. A token a plugin claims but cannot
+ * decode is dropped on purpose — falling through would open a local shell on
+ * the text of a broken bastion link, which is worse than nothing.
+ */
+export interface CliLinkPlugin {
+  /** Stable id, also the key the settings page toggles. */
+  id: string;
+  claims(arg: string): boolean;
+  parse(arg: string): SshLoginFields | null;
+}
+
 export interface CliParseContext {
   defaultSshPort: number;
   hostKeyPolicy: HostKeyPolicy;
@@ -25,6 +41,8 @@ export interface CliParseContext {
   profiles: ShellProfile[];
   defaultProfileId: string;
   defaultDistribution?: string;
+  /** Plugins the user has left on; absent means none. */
+  plugins?: readonly CliLinkPlugin[];
 }
 
 export type CliCommand =
@@ -82,7 +100,7 @@ export function tokenize(line: string): string[] {
   return tokens;
 }
 
-interface SshCommandFields {
+export interface SshLoginFields {
   host?: string;
   port?: number;
   username?: string;
@@ -100,7 +118,7 @@ function splitUserHost(target: string): { username?: string; host?: string } {
 }
 
 /** Parses the inner command line of `-newtab "<command>"`. */
-export function parseSshCommandLine(line: string): SshCommandFields | null {
+export function parseSshCommandLine(line: string): SshLoginFields | null {
   const tokens = tokenize(line);
   if (tokens.length === 0) return null;
 
@@ -128,7 +146,7 @@ export function parseSshCommandLine(line: string): SshCommandFields | null {
   if (index >= tokens.length) return null;
 
   index += 1;
-  const fields: SshCommandFields = { password };
+  const fields: SshLoginFields = { password };
   const trailing: string[] = [];
 
   while (index < tokens.length) {
@@ -185,7 +203,7 @@ export function parseSshCommandLine(line: string): SshCommandFields | null {
   return fields.host ? fields : null;
 }
 
-export function parseSshUrl(url: string): SshCommandFields | null {
+export function parseSshUrl(url: string): SshLoginFields | null {
   const match = /^ssh:\/\/(?:([^@/]+)@)?([^:/]+)(?::(\d+))?\/?$/i.exec(url.trim());
   if (!match) return null;
   const [, username, host, port] = match;
@@ -194,7 +212,7 @@ export function parseSshUrl(url: string): SshCommandFields | null {
 }
 
 function buildSshSpec(
-  fields: SshCommandFields,
+  fields: SshLoginFields,
   ctx: CliParseContext,
   origin: Origin,
 ): SessionSpec {
@@ -245,6 +263,23 @@ function buildWslSpec(ctx: CliParseContext, origin: Origin, distribution?: strin
   };
 }
 
+/**
+ * Offers one token to the plugins, in registration order.
+ *
+ * Returns true when a plugin claimed it, whether or not the link decodes: a
+ * claimed token is the plugin's to drop, and a broken bastion link must not fall
+ * through to the local-shell branch that would type `sso://…` into a shell.
+ */
+function pluginLink(arg: string, ctx: CliParseContext, raw: string, specs: SessionSpec[]): boolean {
+  for (const plugin of ctx.plugins ?? []) {
+    if (!plugin.claims(arg)) continue;
+    const fields = plugin.parse(arg);
+    if (fields) specs.push(buildSshSpec(fields, ctx, { type: 'cli', raw, via: 'url' }));
+    return true;
+  }
+  return false;
+}
+
 export function parseInvocation(argv: readonly string[], ctx: CliParseContext): CliCommand {
   const args = [...argv];
   if (args.length === 0) return { type: 'none' };
@@ -260,6 +295,10 @@ export function parseInvocation(argv: readonly string[], ctx: CliParseContext): 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] as string;
     const lower = arg.toLowerCase();
+
+    // A link handed over by a plugin: `sso://…` from a bastion page, whether it
+    // arrived as an argv token or through the OS `open-url` event.
+    if (pluginLink(arg, ctx, raw, specs)) continue;
 
     if (lower === '--help' || lower === '-h' || lower === '/?' || lower === 'help') return { type: 'help' };
     if (lower === '--version' || lower === '-v' || lower === '-version') return { type: 'version' };
@@ -285,7 +324,13 @@ export function parseInvocation(argv: readonly string[], ctx: CliParseContext): 
       if (value) {
         const fields = parseSshCommandLine(value);
         const origin: Origin = { type: 'cli', raw, via: 'newtab' };
-        specs.push(fields ? buildSshSpec(fields, ctx, origin) : buildLocalSpec(ctx, origin, value));
+        const linked: SessionSpec[] = [];
+        if (!fields && pluginLink(value, ctx, raw, linked)) {
+          // A portal that wraps its link in `-newtab` still reaches the plugin.
+          specs.push(...linked);
+        } else {
+          specs.push(fields ? buildSshSpec(fields, ctx, origin) : buildLocalSpec(ctx, origin, value));
+        }
       }
       i += 1;
       continue;
@@ -294,7 +339,10 @@ export function parseInvocation(argv: readonly string[], ctx: CliParseContext): 
     if (lower === '-url' || lower === '--url') {
       const value = takeValue(i);
       const fields = value ? parseSshUrl(value) : null;
-      if (fields) {
+      const linked: SessionSpec[] = [];
+      if (value && !fields && pluginLink(value, ctx, raw, linked)) {
+        specs.push(...linked);
+      } else if (fields) {
         const pendingPassword = args.find((item, index) => index > i && (item === '-pw' || item === '--password'));
         if (pendingPassword) {
           fields.password = args[args.indexOf(pendingPassword) + 1];

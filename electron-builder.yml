@@ -32,6 +32,11 @@ extraResources:
     to: icon.png
 asarUnpack:
   - '**/node_modules/@lydell/node-pty*/**'
+# macOS only: this checkout is adapted to the local arm64 machine. The hook
+# ad-hoc signs the bundle before the dmg is built, because a locally built app
+# has no Developer ID certificate and Apple Silicon refuses to launch a bundle
+# whose signature does not cover its (edited) Info.plist.
+afterPack: scripts/after-pack.cjs
 win:
   target:
     - target: nsis
@@ -48,8 +53,40 @@ nsis:
   shortcutName: EasyShell
 mac:
   category: public.app-category.developer-tools
-  target: [dmg]
+  target:
+    - target: dmg
+      arch: [arm64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # `null` disables certificate discovery entirely: no Apple Developer account is
+  # involved. Signing is done ad-hoc by the afterPack hook above.
+  identity: null
+  notarize: false
   hardenedRuntime: false
+  darkModeSupport: true
+  # URL schemes are declared here because macOS reads them from Info.plist, not
+  # from the app at run time. The list is the default set: `sso` is what the SSO
+  # plugin claims (and `--release-sso` gives back), `easyshell` is a manual test
+  # entry point that cannot collide with anything. A bastion using another scheme
+  # adds it without editing this file — `EASYSHELL_URL_SCHEMES="usm,jumpserver"
+  # npm run dist:mac` — and then picks it in 设置 → 插件, because which scheme the
+  # app claims is a setting (`plugins.sso.schemes`), not a build constant.
+  extendInfo:
+    CFBundleURLTypes:
+      - CFBundleURLName: com.easyshell.sso
+        CFBundleTypeRole: Viewer
+        CFBundleURLSchemes:
+          - sso
+          - easyshell
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  title: ${productName} ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
 linux:
   category: Development
   target: [AppImage, deb]

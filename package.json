@@ -29,6 +29,7 @@
     "dist:win:portable": "npm run build && electron-builder --win portable --x64",
     "dist:win:release": "npm run build && electron-builder --win --x64 --config.compression=maximum",
     "dist:mac": "npm run build && electron-builder --mac",
+    "dist:mac:dir": "npm run build && electron-builder --mac --dir",
     "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {

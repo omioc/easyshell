@@ -16,6 +16,7 @@ import type {
   DeepPartial,
   EasyShellBridge,
   ExecResult,
+  PluginInfo,
   SftpEntry,
   SftpEvent,
   SessionEvent,
@@ -934,6 +935,18 @@ export function createMockBridge(): EasyShellBridge {
 
     async getSettings() {
       return state.settings;
+    },
+
+    /** The same catalog the main process ships, minus the OS claim. */
+    async listPlugins(): Promise<PluginInfo[]> {
+      return [
+        {
+          id: 'sso',
+          labelKey: 'plugin.sso.label',
+          descriptionKey: 'plugin.sso.description',
+          enabledByDefault: true,
+        },
+      ];
     },
 
     async updateSettings(patch: DeepPartial<Settings>) {
